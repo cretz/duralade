@@ -1,0 +1,64 @@
+import duralade.logger
+import duralade.random
+
+extern validate_transfer {
+  in amount: i32
+  in from_account: str
+  in to_account: str
+  out :error?
+}
+
+extern withdraw_funds {
+  in idempotency_key: str
+  in amount: i32
+  in from_account: str
+  out :error?
+}
+
+extern deposit_funds {
+  in idempotency_key: str
+  in amount: i32
+  in to_account: str
+  out :error?
+  out charge_id: str?
+}
+
+extern send_complete_notification {
+  in amount: i32
+  in from_account: str
+  in to_account: str
+  out :error?
+}
+
+out fob money_transfer {
+  in amount: i32
+  in from_account: str
+  in to_account: str
+
+  out :error?
+  out progress = 0
+  out transfer_state: str? # TODO(demonstrate enums)
+  out deposit_charge_id: str?
+
+  logger.info(message: "Starting money transfer")
+
+  idempotency_key = random.uuid()
+
+  # Validate and update progress
+  run(validate_transfer(amount, from_account, to_account)).error!
+  transfer_state = "running"
+  progress += 25
+
+  # Withdraw and update progress
+  run(withdraw_funds(idempotency_key, amount, from_account)).error!
+  progress += 25
+
+  # Deposit and update progress
+  dep_res = run(deposit_funds(idempotency_key, amount, to_account))
+  dep_res.error!
+  deposit_charge_id = dep_res.charge_id
+  progress += 25
+
+  # Mark complete and set charge ID
+  run(send_complete_notification(amount, from_account, to_account)).error!
+}

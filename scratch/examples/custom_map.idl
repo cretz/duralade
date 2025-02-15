@@ -1,0 +1,25 @@
+out data custom_map {
+  intype value
+  intype key: any
+
+  __state: state
+}
+
+out data state {
+  # TODO
+}
+
+out func new {
+  intype key: any
+  intype value
+
+  in initial_capacity: int?
+  out value: custom_map[key, value]
+}
+
+out func custom_map.set {
+  in :key
+  in :value
+
+  __state.add(key, value)
+}

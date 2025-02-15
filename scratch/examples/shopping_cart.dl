@@ -1,0 +1,162 @@
+# Require this order (alphabetical within):
+# * out data
+# * data
+# * extern
+# * out fob
+#   * nested fobs of that fob, out first
+# * fob
+#   * nested fobs of that fob
+
+# Require this order inside data (alphabetical within):
+# * required fields
+# * optional fields
+
+# For data fields:
+# * Comment represents group of ones below, otherwise need blank line
+
+# Require this order inside fob (alphabetical within):
+# * in required fields
+# * in optional fields
+# * inout required fields
+# * inout optional fields
+# * out required fields
+# * out optional fields
+# * shared fields
+# * statements (must be after blank line from above)
+
+# Should we allow "group <name> {" which can be anywhere to usurp rules, all code is in an implicit outer "root" group?
+
+# Made new concept called func
+# * Have to do run or start for all fobs, but not funcs
+# * All data are implicit funcs where all data is inout and with no logic?
+
+import duralade.duration
+import duralade.error
+import duralade.logger
+import duralade.retry
+
+out data checkout_info {
+  opaque_card_ref: str
+  opaque_shipping_details_ref: str
+}
+
+out data item {
+  id: str
+  product_id: str
+  quantity: i32
+}
+
+out data state {
+  email: str
+  items: arr[item]
+  checkout_id: str? = nil
+  done = false
+}
+
+extern do_checkout {
+  in :checkout_info
+  in :state
+  in retry_policy = retry.policy(start_to_close_timeout: duration(seconds: 30))
+  out checkout_id: str
+  out :error?
+}
+
+extern send_abandoned_cart_email {
+  in :state
+  in retry_policy = retry.policy(start_to_close_timeout: duration(seconds: 30))
+  out :error?
+}
+
+out fob shopping_cart {
+  inout :state
+  shared lock = false
+  shared abandoned_timer: timer?
+
+  # Send abandoned cart email in background
+  reset_abandoned_timer()
+  start(fob {
+    # This re-evaluates each tick, so it is safe
+    wait { done(abandoned_timer) }
+    # Ignore timer failure (cancel) or already done
+    if abandoned_timer?.error || state.done {
+      return
+    }
+    if s := run(send_abandoned_cart_email(state)); s.error {
+      # Notice how "s.error" means "error: s.error" in line below
+      logger.warn(message: "Failed sending abandoned cart email", s.error)
+    }
+  })
+
+  # Wait until checked out
+  wait { state.checkout_id != "" }
+}
+
+out fob shopping_cart.add_item {
+  in :item
+  out :error?
+
+  wait { !lock }
+  lock = true
+  defer { lock = false }
+  defer { reset_abandoned_timer() }
+
+  if state.done {
+    error(message: "Cart done")!
+  }
+  for i in state.items {
+    if i.id == item.id {
+      error(message: "Item already exists")!
+    }
+  }
+  state.items.add(item)
+}
+
+out fob shopping_cart.checkout {
+  in :checkout_info
+  out :error?
+
+  wait { !lock }
+  lock = true
+  defer { lock = false }
+
+  # Mark done, but if failed, we can mark undone
+  state.done = true
+
+  var res = run(do_checkout(state, checkout_info))
+  if res.error {
+    state.done = false
+    res!
+  }
+  state.checkout_id = res.id
+}
+
+out fob shopping_cart.remove_item {
+  in id: str
+  out :error?
+
+  wait { !lock }
+  lock = true
+  defer { lock = false }
+  defer { reset_abandoned_timer() }
+
+  if state.done {
+    error.new(message: "Cart done")!
+  }
+  for i in state.items {
+    if i.id == id {
+      state.items.remove(i)
+      return
+    }
+  }
+  error.new("Item not found")!
+}
+
+func shopping_cart.reset_abandoned_timer {
+  # Note, this is a poor-man's updatable timer, could have primitive here
+  abandoned_timer?.cancel()
+  if state.done {
+    abandoned_timer = nil
+  } else {
+    abandoned_timer = start(sleep(:duration(days: 5)))
+  }
+}
