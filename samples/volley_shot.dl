@@ -1,0 +1,88 @@
+@doc(summary = `Volley shot entity demonstrating concurrent extern calls.
+
+Example usage via CLI:
+
+    # Fire a volley at multiple points
+    duralade entity spawn \
+        --entity volley_shot \
+        --id volley1 \
+        --in '{"points": [{"x": 5, "y": 3}, {"x": 7, "y": 8}, {"x": 2, "y": 4}]}' \
+        --state volley1.duralade.json
+
+    # Tick starts all shoot externs concurrently
+    duralade entity tick \
+        --state volley1.duralade.json
+
+    # Complete each shoot extern (can be done in any order)
+    duralade entity complete-extern \
+        --request-event <event_num_1> \
+        --result '{"hit": false}' \
+        --state volley1.duralade.json
+
+    duralade entity complete-extern \
+        --request-event <event_num_2> \
+        --result '{"hit": true}' \
+        --state volley1.duralade.json
+
+    # Tick processes results - returns true as soon as any hit
+    duralade entity tick \
+        --state volley1.duralade.json
+
+    # Check final result
+    duralade entity describe \
+        --state volley1.duralade.json`)
+
+out data point {
+    x: int
+    y: int
+}
+
+out entity volley_shot {
+    in points: array[point]
+    in max_concurrent = points.len()
+    value running = 0
+
+    run {
+        out hit = false
+        out! :error?
+
+        # Start all shoots with concurrency control
+        tasks: array[task[t = data { hit: bool, out! :error? }]] = []
+        for point in points.iter() {
+            tasks.push(task(work = shoot_one(point)))
+        }
+
+        # Check each as they complete, return on first hit
+        # Only propagate errors if no hits found
+        var last_error: error?
+        for completed in task.completed_iter(tasks) {
+            if err := completed.result.error? {
+                last_error = err
+            } else if completed.result.hit {
+                hit = true
+                return
+            }
+        }
+
+        # No hits found, return error if any occurred
+        error = last_error
+    }
+
+    func shoot_one {
+        in :point
+        out hit = false
+        out! :error?
+
+        # Wait for room in concurrency limit
+        wait(running < max_concurrent)!
+        running += 1
+        defer { running -= 1 }
+
+        hit = shoot(point).hit
+    }
+}
+
+extern shoot {
+    in point: point
+    out hit: bool
+}

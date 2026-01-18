@@ -1,0 +1,174 @@
+@doc(summary = `Shopping cart entity demonstrating stateful workflows with prepare/apply pattern.
+
+Example usage via CLI:
+
+    # Create an empty shopping cart
+    duralade entity spawn \
+        --entity shopping_cart \
+        --id cart1 \
+        --state cart1.duralade.json
+
+    # Add items to cart
+    duralade entity invoke-func \
+        --func item_add \
+        --in '{"product_id": "prod1", "quantity": 2}' \
+        --state cart1.duralade.json
+    duralade entity tick \
+        --state cart1.duralade.json
+
+    # Complete product_lookup extern
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --result '{"name": "Widget", "price": 1000}' \
+        --state cart1.duralade.json
+    duralade entity tick \
+        --state cart1.duralade.json
+
+    # Get current cart items
+    duralade entity view \
+        --func items_get \
+        --state cart1.duralade.json
+
+    # Prepare checkout (calculates subtotal and tax)
+    duralade entity invoke-func \
+        --func checkout_prepare \
+        --state cart1.duralade.json
+    duralade entity tick \
+        --state cart1.duralade.json
+
+    # Complete checkout_prepare_apply extern
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --result '{"subtotal": 2000, "tax": 200}' \
+        --state cart1.duralade.json
+    duralade entity tick \
+        --state cart1.duralade.json
+
+    # Apply checkout (completes the order)
+    duralade entity invoke-func \
+        --func checkout \
+        --state cart1.duralade.json
+    duralade entity tick \
+        --state cart1.duralade.json
+
+    # Complete checkout_apply extern
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --result '{"order_id": "order-123"}' \
+        --state cart1.duralade.json
+    duralade entity tick \
+        --state cart1.duralade.json
+
+    # Check final status and order_id
+    duralade entity describe \
+        --state cart1.duralade.json`)
+
+out data error_stale_prepared_values {
+    message: str
+}
+
+out data shopping_cart_item {
+    product_id: str
+    name: str
+    price: int
+    quantity: int
+}
+
+out entity shopping_cart {
+    out order_id: str?
+    value items: map[key = str, value = shopping_cart_item] = {}
+    value prepared_subtotal: int?
+    value prepared_tax: int?
+
+    run {
+        out! :error?
+
+        wait(order_id != nil)!
+    }
+
+    out func checkout {
+        out order_id: str?
+        out! :error?
+
+        if prepared_subtotal, prepared_tax := prepared_subtotal?, prepared_tax? {
+            items := array.from_iter(iter = items.values_iter)
+            result := checkout_apply(items, prepared_subtotal, prepared_tax)!
+            outer.order_id, order_id = result.order_id, result.order_id
+        } else {
+            return! error.create(message = "checkout_prepare must be called before checkout")
+        }
+    }
+
+    out func checkout_prepare {
+        out subtotal: int
+        out tax: int
+        out! :error?
+
+        items := array.from_iter(iter = items.values_iter)
+        result := checkout_prepare_apply(items)!
+        prepared_subtotal, subtotal = result.subtotal, result.subtotal
+        prepared_tax, tax = result.tax, result.tax
+    }
+
+    out func item_add {
+        in product_id: str
+        in quantity = 1
+        out! :error?
+
+        if existing := items.get(key = product_id)? {
+            existing.quantity += quantity
+        } else {
+            product := product_lookup(product_id)!
+            items.set(
+                key = product_id,
+                value = shopping_cart_item(
+                    product_id,
+                    product.name,
+                    product.price,
+                    quantity,
+                ),
+            )
+        }
+    }
+
+    out noblock func item_remove {
+        in product_id: str
+        in quantity = 1
+
+        if existing := items.get(key = product_id)? {
+            existing.quantity -= quantity
+            if existing.quantity <= 0 {
+                items.remove(key = product_id)
+            }
+        }
+    }
+
+    out view func items_get {
+        out items_list = array.from_iter(iter = items.values_iter)
+    }
+}
+
+# TODO: demonstrate HTTP invocation pattern
+extern checkout_apply {
+    in items: array[shopping_cart_item]
+    in prepared_subtotal: int
+    in prepared_tax: int
+    out order_id: str
+    # Can return error_stale_prepared_values if items changed since prepare
+    out! :error?
+}
+
+# TODO: demonstrate HTTP invocation pattern
+extern checkout_prepare_apply {
+    in items: array[shopping_cart_item]
+    out subtotal: int
+    out tax: int
+    out! :error?
+}
+
+extern product_lookup {
+    in product_id: str
+    out name: str
+    out price: int
+    out! :error?
+}

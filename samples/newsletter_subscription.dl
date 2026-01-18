@@ -1,0 +1,101 @@
+@doc(summary = `Periodic newsletter subscription entity demonstrating time-based workflows and cancellation.
+
+Example usage via CLI:
+
+    # Spawn starts entity, enters loop, sleeps for 7 days
+    duralade entity spawn \
+        --entity newsletter_subscription \
+        --id sub1 \
+        --in '{"email": "user@example.com"}' \
+        --state sub1.duralade.json
+
+    # Complete first sleep at +7d and tick - sends newsletter
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --current-time +7d \
+        --state sub1.duralade.json
+    duralade entity tick \
+        --current-time +0 \
+        --state sub1.duralade.json
+
+    # Complete send and tick - increments counter, loops, sleeps again
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --current-time +0 \
+        --state sub1.duralade.json
+    duralade entity tick \
+        --current-time +0 \
+        --state sub1.duralade.json
+
+    # Complete second sleep at +7d and tick - sends second newsletter
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --current-time +7d \
+        --state sub1.duralade.json
+    duralade entity tick \
+        --current-time +0 \
+        --state sub1.duralade.json
+
+    # Complete second send and tick
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --current-time +0 \
+        --state sub1.duralade.json
+    duralade entity tick \
+        --current-time +0 \
+        --state sub1.duralade.json
+
+    # Cancel and tick - gets canceled_error, sends farewell
+    duralade entity cancel \
+        --current-time +0 \
+        --state sub1.duralade.json
+    duralade entity tick \
+        --current-time +0 \
+        --state sub1.duralade.json
+
+    # Complete farewell and describe final status
+    duralade entity complete-extern \
+        --request-event <event_num> \
+        --current-time +0 \
+        --state sub1.duralade.json
+    duralade entity describe \
+        --current-time +0 \
+        --state sub1.duralade.json`)
+
+out entity newsletter_subscription {
+    in email: str
+    out send_count = 0
+
+    run {
+        out! :error?
+
+        # Infinite loop sending newsletters every 7 days
+        for {
+            # Sleep for 7 days (can be canceled)
+            sleep_result := time.sleep(duration = time.duration_create(days = 7))
+            if err := sleep_result.error? {
+                if _ := err as cancellation.canceled_error? {
+                    # Send farewell email before exiting (uninterruptible)
+                    implicitly cancellation.detached()
+                    send_farewell(email)!
+                }
+                return! err
+            }
+
+            # Send the newsletter (uninterruptible)
+            implicitly cancellation.detached()
+            send_newsletter(email)!
+            send_count += 1
+        }
+    }
+}
+
+extern send_farewell {
+    in email: str
+    out! :error?
+}
+
+extern send_newsletter {
+    in email: str
+    out! :error?
+}
