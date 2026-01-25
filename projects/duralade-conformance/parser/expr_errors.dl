@@ -1,0 +1,186 @@
+func anon_data_field_missing_default {
+    var x = data {
+        name: str
+        ^^^^^^^^^ @@ERROR: Anonymous data field must have '= expression'
+    }
+}
+
+func anon_data_missing_brace {
+    var x = data
+               ^ @@ERROR: Expected '{' in data
+}
+
+func anon_func_missing_brace {
+    var f = func
+               ^ @@ERROR: Expected '{' in func
+}
+
+func array_literal_errors {
+    var a = [1, 2
+            ^ @@ERROR: Expected ']'
+}
+
+func as_narrowing_missing_else {
+    foo as int
+             ^ @@ERROR: Expected 'else!' after type in 'as' narrowing
+}
+
+func bad_array_bracket_spacing {
+    var x = [ 1, 2]
+             ^ @@STRICT: No space allowed after '['
+}
+
+func bad_array_close_spacing {
+    var x = [1, 2 ]
+                 ^ @@STRICT: No space allowed before ']'
+}
+
+func bad_array_comma_spacing {
+    var x = [1,2]
+               ^ @@STRICT: Expected space or newline after ','
+}
+
+func bad_invocation_arg_name {
+    foo(1 + 2 = x)
+        ^^^^^ @@ERROR: Argument name must be an identifier
+}
+
+func bad_invocation_arg_spacing_after {
+    foo(x =5)
+           ^ @@STRICT: Expected exactly one space after '=' in argument
+}
+
+func bad_invocation_arg_spacing_before {
+    foo(x= 5)
+         ^ @@STRICT: Expected exactly one space before '=' in argument
+}
+
+func bad_invocation_close_spacing {
+    foo(x )
+         ^ @@STRICT: No space allowed before ')'
+}
+
+func bad_invocation_comma_spacing {
+    foo(x,y)
+          ^ @@STRICT: Expected space or newline after ','
+}
+
+func bad_invocation_paren_spacing {
+    foo( x)
+        ^ @@STRICT: No space allowed after '('
+}
+
+func bad_map_brace_spacing {
+    var x = {"a" = 1 }
+             ^ @@STRICT: Expected space or newline after '{'
+}
+
+func bad_map_close_spacing {
+    var x = { "a" = 1}
+                     ^ @@STRICT: Expected space or newline before '}'
+}
+
+func bad_map_comma_spacing {
+    var x = { "a" = 1,"b" = 2 }
+                      ^ @@STRICT: Expected space or newline after ','
+}
+
+func bad_string_escape {
+    var a: str = "\q"
+                  ^^ @@ERROR: Unknown escape sequence '\q'
+}
+
+func big_unicode_escape_too_few_digits {
+    var a = "\U0000G"
+             ^^^^^^ @@ERROR: Expected 8 hex digits in escape sequence
+}
+
+func binary_missing_right_operand {
+    var a = 1 +
+             ^^ @@ERROR: Expected expression after operator
+}
+
+func hex_escape_too_few_digits {
+    var a = "\xG"
+             ^^^ @@ERROR: Expected 2 hex digits in escape sequence
+}
+
+func hex_escape_uppercase {
+    var a = "\xAB"
+               ^^ @@STRICT: Hex digits in escape sequences must be lowercase
+}
+
+func invalid_unicode_codepoint {
+    var a = "\Uffffffff"
+             ^^^^^^^^^^ @@ERROR: Invalid Unicode code point
+}
+
+func map_literal_errors {
+    var b = { "a" }
+              ^^^ @@ERROR: Expected '=' after map key
+}
+
+func nil_narrowing_missing_bang {
+    foo? + bar
+         ^ @@ERROR: Expected '!' or 'else!' after '?'
+}
+
+func number_float_both_parts {
+    var a = 1000.1234
+            ^^^^^^^^^ @@STRICT: Number should be formatted as 1_000.123_4
+}
+
+func number_frac_missing_underscores {
+    var a = 1.1234
+            ^^^^^^ @@STRICT: Number should be formatted as 1.123_4
+}
+
+func number_int_missing_underscores {
+    var a = 1000
+            ^^^^ @@STRICT: Number should be formatted as 1_000
+}
+
+func number_int_wrong_grouping {
+    var a = 10_00
+            ^^^^^ @@STRICT: Number should be formatted as 1_000
+}
+
+func shorthand_arg_not_derivable {
+    foo(1 + 2)
+        ^^^^^ @@ERROR: Argument name required for non-identifier expressions
+}
+
+func type_args_without_invocation {
+    foo[t = int]
+               ^ @@ERROR: Expected '(' after type arguments
+}
+
+func unary_missing_operand {
+    var a = -
+            ^ @@ERROR: Expected expression after '-'
+}
+
+func unicode_escape_too_few_digits {
+    var a = "\u00G"
+             ^^^^ @@ERROR: Expected 4 hex digits in escape sequence
+}
+
+func unterminated_raw_string {
+    var a: str = ``hello
+                 ^^^^^^^ @@ERROR: Unterminated raw string literal
+}
+
+func unterminated_string {
+    var a: str = "hello
+                 ^ @@ERROR: Unterminated string literal
+}
+
+func wait_empty {
+    wait()
+    ^^^^^ @@ERROR: Expected expression in 'wait'
+}
+
+func wait_missing_paren {
+    wait
+       ^ @@ERROR: Expected '(' after 'wait'
+}

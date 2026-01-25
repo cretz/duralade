@@ -1,0 +1,36 @@
+type missing_equals
+                  ^ @@ERROR: Expected '=' in type alias
+
+view data bad_modifier {
+^^^^ @@ERROR: cannot have 'view' or 'noblock' modifier
+}
+
+data missing_brace
+                 ^ @@ERROR: Expected '{' in data
+
+entity missing_brace_entity
+                          ^ @@ERROR: Expected '{' in entity
+
+@5
+^^ @@ERROR: Annotation must be an identifier or dot-access chain
+func bad_ann {}
+
+func missing_brace_func
+                      ^ @@ERROR: Expected '{' in func
+
+out extern bad_out {
+^^^ @@ERROR: cannot have 'out' modifier
+}
+
+extern missing_brace_extern
+                          ^ @@ERROR: Expected '{' in extern
+
+view native missing_brace_native
+                               ^ @@ERROR: Expected '{' in native
+
+native needs_modifier {
+^^^^^^ @@ERROR: must have 'view' or 'noblock' modifier
+}
+
+blarg not_a_construct
+^^^^^ @@ERROR: Unrecognized construct

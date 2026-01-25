@@ -1,0 +1,5 @@
+# Rust build artifacts
+/target/
+
+# Don't ignore Cargo.lock - we have binaries in this workspace
+# Cargo.lock

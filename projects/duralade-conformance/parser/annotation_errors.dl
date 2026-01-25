@@ -1,0 +1,27 @@
+@foo
+
+@bar
+^^^^ @@STRICT: No blank lines allowed between module-level annotations
+
+import baz
+
+data blank_line_construct_anns_a {}
+
+@qux
+
+@quux
+^^^^^ @@STRICT: No blank lines allowed between annotations and construct
+data blank_line_construct_anns_b {}
+
+@baz
+^^^^ @@STRICT: No blank lines allowed between annotations and construct
+
+data blank_line_construct_trailing_ann {}
+
+func blank_line_field_anns {
+    @fa
+
+    @fb
+    ^^^ @@STRICT: No blank lines allowed between annotations and field
+    in x: int
+}

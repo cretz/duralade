@@ -1,0 +1,30 @@
+entity dup_init {
+    init {
+    }
+    init {
+    ^^^^ @@ERROR: Duplicate 'init' block
+    }
+}
+
+entity dup_run {
+    run {
+    }
+    run {
+    ^^^ @@ERROR: Duplicate 'run' block
+    }
+}
+
+func bad_field_ident {
+    in 123bad: int
+       ^ @@ERROR: cannot start with a digit
+}
+
+func missing_colon_space_after {
+    in x:int
+         ^ @@STRICT: Expected exactly one space after ':'
+}
+
+func space_before_colon {
+    in x : int
+        ^ @@STRICT: Expected no space before ':'
+}

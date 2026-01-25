@@ -1,0 +1,77 @@
+func defer_errors {
+    defer  {
+         ^^ @@STRICT: Expected exactly one space after 'defer'
+    }
+}
+
+func for_errors {
+    for
+    ^^^ @@ERROR: Expected expression or '{' after 'for'
+    for x in items {
+             ^^^^^ @@ERROR: For-in expression must be an invocation
+    }
+    for: {
+       ^ @@ERROR: Expected label name after ':'
+    }
+    break:
+         ^ @@ERROR: Expected label name after ':'
+    continue:
+            ^ @@ERROR: Expected label name after ':'
+}
+
+func if_errors {
+    if
+    ^^ @@ERROR: Expected condition after 'if'
+    if x := val as int, {
+                        ^ @@ERROR: Expected expression in narrowing binding
+    }
+    if x := val?, {
+                  ^ @@ERROR: Expected expression in narrowing binding
+    }
+    if x := compute(); {
+    ^^^^^^^^^^^^^^^^^^^ @@ERROR: Expected condition after 'if'
+    }
+    if compute(); x > 0 {
+       ^^^^^^^^^ @@ERROR: If init must be a variable declaration or assignment
+    }
+}
+
+func implicitly_errors {
+    implicitly
+    ^^^^^^^^^^ @@ERROR: Expected expression after 'implicitly'
+}
+
+func misc_stmt_errors {
+    var a: int = 1 var b: int = 2
+                  ^ @@ERROR: Expected newline or '}' after statement
+    a.b := 5
+    ^^^ @@ERROR: Left side of ':=' must be an identifier
+    a.b, c := 5, 6
+    ^^^^^^ @@ERROR: Left side of ':=' must be an identifier
+    a, b := 5
+    ^^^^^^^^^ @@ERROR: Expected 2 values after ':=', found 1
+    var a: int, b: str = 1
+    ^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: Expected 2 values after '=', found 1
+    var a, b, c = 1, 2
+    ^^^^^^^^^^^^^^^^^^ @@ERROR: Expected 3 values after '=', found 2
+    (x)
+    ^^^ @@ERROR: Parenthesized expression cannot be a standalone statement
+    -x
+    ^^ @@ERROR: Prefix unary expression cannot be a standalone statement
+    !x
+    ^^ @@ERROR: Prefix unary expression cannot be a standalone statement
+}
+
+func patch_errors {
+    % myversion complete
+    ^ @@STRICT: Patch '%' should start at column 0
+% myversion
+^^^^^^^^^^^ @@ERROR: Expected '{{' or 'complete' after patch version
+% myother {{
+^^^^^^^^^^^^ @@ERROR: Unterminated patch chain, expected '% }}'
+}
+
+func stmt_termination_with_comment {
+    var x = 5 # inline comment
+              ^ @@STRICT: Comment must be on its own line
+}

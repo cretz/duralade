@@ -1,0 +1,10 @@
+# Test file for import spacing violations
+
+import baz.qux  as alias
+              ^^ @@STRICT: Expected exactly one space before 'as'
+
+import  foo.bar
+       ^ @@STRICT: Expected no additional whitespace after 'import '
+
+import test.path as  renamed
+                    ^ @@STRICT: Expected no additional whitespace after 'as '

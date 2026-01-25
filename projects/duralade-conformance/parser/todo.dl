@@ -1,0 +1,92 @@
+# Conformance test wishlist
+# These are scenarios we want to eventually have as passing tests.
+# Runtime tests may cover many of these; this is the backlog.
+
+# --- Line continuation / multi-line ---
+# - Multi-line array literal with trailing commas
+# - Multi-line map literal with trailing commas
+# - Multi-line invocation args (named and shorthand)
+# - Binary expression continued after operator (a +\n    b)
+# - Chained dot access across lines (foo.\n    bar.\n    baz)
+# - Chained invocations across lines (foo(x).\n    bar(y))
+# - Parenthesized expression spanning lines
+# - If condition spanning multiple lines
+# - For-in invocation with multi-line args
+# - Nested multi-line literals (array of maps, map of arrays)
+
+# --- Expressions ---
+# - Invocation with type args: foo[t = int](x)
+# - Invocation with shorthand type args: foo[int](x)
+# - Deeply nested binary expressions with mixed precedence
+# - All binary operators at each precedence level
+# - Prefix unary chaining (!!a, -(-x))
+# - Nil narrowing: expr?!, expr? else! val
+# - As narrowing: expr as! type, expr as type else! val
+# - Postfix early-return ! on various expressions
+# - Nil coalescing ?? with chained access
+# - outer access in nested scopes
+# - Parenthesized subexpressions
+# - String literals with all escape sequences
+# - Raw strings (now N-backtick delimited, N >= 2)
+# - Number literals with underscores (1_000_000)
+# - Float literals (with/without leading zero)
+
+# --- Anonymous expressions ---
+# - Anonymous data: data { name: str = "hello" \n age = 42 }
+# - Anonymous data empty: data {}
+# - Anonymous func: func { in x: int \n var y = x + 1 }
+# - Anonymous view func: view func { in x: int \n x + 1 }
+# - Anonymous noblock func: noblock func { in x: int \n x + 1 }
+# - Anonymous data with member funcs (named data only, not anonymous)
+
+# --- Statements ---
+# - var with type, with expression, with both, shorthand :=
+# - All assignment operators (=, +=, -=, *=, /=, %=)
+# - if / else if / else chains
+# - if narrowing-as: if x := val as int { }
+# - if narrowing-as multi: if a, b := x as int, y as str { }
+# - if narrowing-nil: if x := x? { }
+# - if narrowing-nil multi: if a, b := x?, y? { }
+# - else if with narrowing form independent of if form
+# - Nested if inside if
+# - for infinite, condition, for-in
+# - break and continue
+# - defer with multi-statement block
+# - implicitly block form and rest-of-block form
+# - implicitly with multiple expressions
+# - return and return!
+# - Standalone block { } creating scope
+
+# --- Types ---
+# - Named type: simple (int), qualified (pkg.type)
+# - Nilable: int?
+# - Entity ref: &int, &pkg.type, &int?
+# - Generics: list[int], map[key = str, value = int]
+# - Generic shorthand: list[int] (name = value derived from ident)
+# - Trailing comma in type args: list[int,]
+# - Type introspection: name@type, name@typein, name@typeout
+# - Anonymous data: data { :int }
+# - Anonymous func: func { :int }, view func { :int }, noblock func { :int }
+# - Anonymous entity: entity { :int }
+# - Anonymous type field modifiers: in, out, out!, inout
+# - Anonymous type field with default: :int = ???
+# - Anonymous type field shorthand name derivation: :some_type -> name "some_type"
+# - Shorthand field name derivation from entity ref: :&int -> name "int"
+# - Shorthand field name derivation from generic: :list[int] -> name "list"
+# - Data with shorthand fields (simple, entity ref, generic, nilable)
+
+# --- Constructs ---
+# - Data with fields only
+# - Data with fields, init, run, functions
+# - Entity with fields and functions
+# - Function with parameters and return type
+# - Nested data inside data
+# - Multiple annotations on a construct
+# - Type alias
+
+# --- Source-level ---
+# - Imports (single, multiple, aliased)
+# - Module-level annotations
+# - Multiple constructs in one file
+# - Blank line enforcement between constructs
+# - Line length: 120-char exempt when no space after indent/comment prefix (URLs, long qualified names)

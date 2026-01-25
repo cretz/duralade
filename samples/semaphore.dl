@@ -1,4 +1,5 @@
-@doc(summary = `Counting semaphore for coordination between entities.
+@doc(
+    summary = ``Counting semaphore for coordination between entities.
 
 Example usage via CLI:
 
@@ -22,7 +23,8 @@ Example usage via CLI:
     # Release a permit
     duralade entity invoke-func-noblock \
         --func release \
-        --state sem1.duralade.json`)
+        --state sem1.duralade.json``,
+)
 
 out entity semaphore {
     inout permits: int

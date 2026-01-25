@@ -1,0 +1,27 @@
+func bad_end_brace {
+    var x = 1
+      }
+^^^^^^ @@STRICT: Expected 0 spaces, found 6
+
+func bad_end_bracket {
+    var x = [
+        1,
+        2,
+      ]
+^^^^^^ @@STRICT: Expected 4 spaces, found 6
+}
+
+func bad_end_map_brace {
+    var x = {
+        "a" = 1,
+        "b" = 2,
+      }
+^^^^^^ @@STRICT: Expected 4 spaces, found 6
+}
+
+func bad_end_paren {
+    var x = (
+        1
+      )
+^^^^^^ @@STRICT: Expected 4 spaces, found 6
+}

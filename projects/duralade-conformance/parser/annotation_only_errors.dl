@@ -1,0 +1,2 @@
+@foo
+^^^^ @@STRICT: Required blank line after module-level annotations

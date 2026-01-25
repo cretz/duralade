@@ -1,0 +1,13 @@
+# Test file for comment violations
+
+#no space after hash
+^ @@STRICT: Space required after '#'
+
+# comment with trailing spaces     
+                              ^^^^^ @@STRICT: Trailing whitespace
+
+import foo # trailing comment
+           ^ @@STRICT: Comment must be on its own line
+
+    # comment with wrong indentation (should be 0 for file level)
+^^^^ @@STRICT: Expected 0 spaces, found 4

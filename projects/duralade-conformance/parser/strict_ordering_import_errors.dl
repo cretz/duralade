@@ -1,0 +1,17 @@
+# Test file for strict import ordering
+# Sorting is ASCII: '.' < '0' < 'A' < 'a'
+
+# Basic alphabetical
+import b.foo
+import a.bar
+^^^^^^^^^^^^ @@STRICT: Import 'a.bar' should appear before 'b.foo'
+
+# Second segment tiebreak
+import c.baz
+import c.bar
+^^^^^^^^^^^^ @@STRICT: Import 'c.bar' should appear before 'c.baz'
+
+# Shorter prefix sorts before longer (foo.bar < fooaaa.baz)
+import d.fooaaa.baz
+import d.foo.bar
+^^^^^^^^^^^^^^^^ @@STRICT: Import 'd.foo.bar' should appear before 'd.fooaaa.baz'
