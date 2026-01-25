@@ -1,0 +1,68 @@
+@doc(summary = `Set data structure for storing unique values.
+
+Example usage via CLI:
+
+    # Create a set with initial items
+    duralade entity spawn \
+        --entity set \
+        --id set1 \
+        --in '{"initial_items": ["a", "b", "c"]}' \
+        --state set1.duralade.json
+
+    # Add an item
+    duralade entity invoke-func-noblock \
+        --func add \
+        --in '{"item": "d"}' \
+        --state set1.duralade.json
+
+    # Check if item exists
+    duralade entity view \
+        --func contains \
+        --in '{"item": "b"}' \
+        --state set1.duralade.json
+
+    # Remove an item
+    duralade entity invoke-func-noblock \
+        --func remove \
+        --in '{"item": "a"}' \
+        --state set1.duralade.json
+
+    # Get current length
+    duralade entity view \
+        --func len \
+        --state set1.duralade.json`)
+
+out entity set {
+    intype t
+    in initial_items: array[t] = []
+    value items: map[key = t, value = bool] = {}
+
+    init {
+        for item in initial_items.iter() {
+            items.set(key = item, value = true)
+        }
+    }
+
+    out noblock func add {
+        in item: t
+        items.set(key = item, value = true)
+    }
+
+    out noblock func remove {
+        in item: t
+        items.remove(key = item)
+    }
+
+    out view func contains {
+        in item: t
+        out result = items.contains_key(key = item)
+    }
+
+    out view func len {
+        out count = items.len()
+    }
+
+    out noblock func clear {
+        items = {}
+    }
+}

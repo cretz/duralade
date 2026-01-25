@@ -1,0 +1,116 @@
+# Duralade TextMate Grammar
+# Convert to JSON with: npm run build
+
+name: Duralade
+scopeName: source.duralade
+fileTypes:
+  - dl
+
+patterns:
+  - include: '#comments'
+  - include: '#keywords'
+  - include: '#strings'
+  - include: '#numbers'
+  - include: '#function-calls'
+  - include: '#types'
+  - include: '#operators'
+  - include: '#identifiers'
+
+repository:
+  comments:
+    patterns:
+      - name: comment.line.number-sign.duralade
+        match: '#\s.*$'
+
+  keywords:
+    patterns:
+      # Construct keywords
+      - name: keyword.declaration.duralade
+        match: \b(entity|data|func|type|extern|native)\b
+
+      # out! modifier (must come before other modifiers)
+      - name: storage.modifier.duralade
+        match: 'out!'
+
+      # Other modifier keywords
+      - name: storage.modifier.duralade
+        match: \b(out|in|inout|intype|value|implicit|view|noblock)\b
+
+      # Control flow
+      - name: keyword.control.duralade
+        match: \b(if|else|for|wait|defer|return|break|continue|implicitly)\b
+
+      # Other keywords
+      - name: keyword.other.duralade
+        match: \b(import|as|var|init|run|outer)\b
+
+  function-calls:
+    patterns:
+      # Function/method calls (any identifier immediately before opening paren)
+      - name: entity.name.function.duralade
+        match: '[a-z_][a-z0-9_]*(?=\()'
+
+  types:
+    patterns:
+      # Built-in types only - be conservative
+      - name: support.type.builtin.duralade
+        match: \b(int|float|str|bool|any)\b
+
+  strings:
+    patterns:
+      # Raw strings with backticks
+      - name: string.quoted.backtick.duralade
+        begin: '`'
+        end: '`'
+        patterns:
+          - name: constant.character.escape.duralade
+            match: '``'
+
+      # Quoted strings
+      - name: string.quoted.double.duralade
+        begin: '"'
+        end: '"'
+        patterns:
+          - name: constant.character.escape.duralade
+            match: '\\(?:[nrt\\""]|x[0-9a-f]{2}|u[0-9a-f]{4}|U[0-9a-f]{8})'
+
+  numbers:
+    patterns:
+      # Float literals
+      - name: constant.numeric.float.duralade
+        match: '\b\d[\d_]*\.\d[\d_]*\b'
+
+      # Integer literals
+      - name: constant.numeric.integer.duralade
+        match: '\b\d[\d_]*\b'
+
+  operators:
+    patterns:
+      # Arithmetic, comparison, logical, and other operators
+      - name: keyword.operator.duralade
+        match: '(\+|-|\*|/|%|==|!=|<=|>=|<|>|&&|\|\||\?\.|\?\?|->|\.|\?|!|@|&)'
+
+      # Assignment operators (including compound)
+      - name: keyword.operator.assignment.duralade
+        match: '(=|:=|\+=|-=|\*=|/=|%=)'
+
+  identifiers:
+    patterns:
+      # Boolean literals
+      - name: constant.language.boolean.duralade
+        match: \b(true|false)\b
+
+      # Nil literal
+      - name: constant.language.nil.duralade
+        match: \bnil\b
+
+      # Raw identifiers
+      - name: variable.other.raw.duralade
+        begin: '`'
+        end: '`'
+        patterns:
+          - match: '``'
+
+      # Normal identifiers (including qualified ones - no special coloring)
+      - name: variable.other.duralade
+        match: '\b[a-z_][a-z0-9_]*\b'

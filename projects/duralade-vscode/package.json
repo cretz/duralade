@@ -1,0 +1,35 @@
+{
+  "name": "duralade-vscode",
+  "displayName": "Duralade",
+  "description": "Language support for Duralade",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.60.0"
+  },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "duralade",
+        "aliases": ["Duralade", "duralade"],
+        "extensions": [".dl"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "duralade",
+        "scopeName": "source.duralade",
+        "path": "./syntaxes/duralade.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "js-yaml syntaxes/duralade.tmLanguage.yaml > syntaxes/duralade.tmLanguage.json",
+    "watch": "nodemon --watch syntaxes/duralade.tmLanguage.yaml --exec npm run build"
+  },
+  "devDependencies": {
+    "js-yaml": "^4.1.0",
+    "nodemon": "^3.0.0"
+  }
+}
