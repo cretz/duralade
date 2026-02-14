@@ -31,6 +31,8 @@ impl Type {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TypeNamed {
     pub node_id: NodeId,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module: Option<Ident>,
     pub path: Vec<Ident>,
     pub type_args: Vec<TypeArgument>,
 }
@@ -102,7 +104,8 @@ pub struct TypeAnonField {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum TypeAnonFieldModifier {
     In,
+    Inout,
     Out,
     OutEarly,
-    Inout,
+    Implicit,
 }

@@ -1,0 +1,32 @@
+# Unknown type argument name errors
+
+# Both type args wrong
+data bad_both {
+    item: pair[key = str, value = int]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: unknown type argument 'key'
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: unknown type argument 'value'
+}
+
+# One right, one wrong
+data bad_mixed {
+    item: pair[k = str, value = int]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: unknown type argument 'value'
+}
+
+# Single unknown type arg
+data bad_single {
+    item: box[x = int]
+    ^^^^^^^^^^^^^^^^^^ @@ERROR: unknown type argument 'x'
+}
+
+data box {
+    intype t
+    value: t
+}
+
+data pair {
+    intype k
+    intype v
+    key: k
+    value: v
+}

@@ -1,0 +1,10 @@
+import circular_import.alpha
+
+out data beta_thing {
+    label: str
+}
+
+out func use_alpha {
+    in a: alpha::alpha_thing
+    out result: str = a.name
+}

@@ -1,0 +1,20 @@
+entity box {
+    in label: str
+    value count = 0
+
+    out func get_count {
+        out count = count
+    }
+}
+
+func access_in_field {
+    b := box(label = "hi")
+    x := b.label
+           ^^^^^ @@ERROR: field 'label' on 'box' is not accessible (only out/inout fields are)
+}
+
+func access_value_field {
+    b := box(label = "hi")
+    x := b.count
+           ^^^^^ @@ERROR: field 'count' on 'box' is not accessible (only out/inout fields are)
+}

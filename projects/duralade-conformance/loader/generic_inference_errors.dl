@@ -1,0 +1,29 @@
+# Generic type inference errors
+
+data box {
+    intype t
+    value: t
+}
+
+data no_input {
+    intype t
+    out result: t
+}
+
+# No arguments use the type param - cannot infer
+func cannot_infer_data {
+    n := no_input()
+         ^^^^^^^^^^ @@ERROR: cannot infer type argument 't'
+}
+
+func cannot_infer_func {
+    r := unresolvable_func(x = 42)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: cannot infer type argument 't'
+}
+
+# Argument types don't reference the type param
+func unresolvable_func {
+    intype t
+    in x: int
+    out result: t = x
+}

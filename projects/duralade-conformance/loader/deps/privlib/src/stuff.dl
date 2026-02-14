@@ -1,0 +1,12 @@
+out data _private_data {
+    x: int
+}
+
+out func _private_func {
+    out result: int
+}
+
+out data public_thing {
+    _secret: int
+    x: int
+}

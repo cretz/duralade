@@ -1,0 +1,29 @@
+data profile {
+    age: int
+    name: str
+}
+
+func ctor_field_nil_mismatch {
+    profile(name = nil, age = 42)
+                   ^^^ @@ERROR: argument 'name' type mismatch: cannot assign nil to non-nilable type str
+}
+
+func ctor_field_type_mismatch {
+    profile(name = 123, age = 42)
+                   ^^^ @@ERROR: argument 'name' type mismatch: expected str, got int
+}
+
+func ctor_missing_required_field {
+    profile(name = "user")
+    ^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: missing required argument 'age'
+}
+
+func ctor_second_field_type_mismatch {
+    profile(name = "user", age = "forty-two")
+                                 ^^^^^^^^^^^ @@ERROR: argument 'age' type mismatch: expected int, got str
+}
+
+func ctor_unknown_field {
+    profile(name = "user", age = 42, nickname = "ace")
+                                     ^^^^^^^^ @@ERROR: unknown argument 'nickname'
+}

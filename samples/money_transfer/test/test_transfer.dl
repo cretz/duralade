@@ -1,0 +1,44 @@
+import duralade.assert
+import duralade.test
+import money_transfer.transfer
+
+@test
+func success {
+    out! :error?
+    implicit :test::context
+
+    # Mock withdraw and deposit
+
+    called_withdraw := false
+    context.on_extern(extern = "money_transfer.transfer::withdraw", handler = func {
+        in account_id: str
+        in amount: int
+        out! :error?
+
+        called_withdraw = true
+        assert.equal(actual = account_id, expected = "from-account")!
+        assert.equal(actual = amount, expected = 1.23)!
+    })!
+
+    called_deposit := false
+    context.on_extern(extern = "money_transfer.transfer::deposit", handler = func {
+        in account_id: str
+        in amount: int
+        out! :error?
+
+        called_deposit = true
+        assert.equal(actual = account_id, expected = "to-account")!
+        assert.equal(actual = amount, expected = 1.23)!
+    })!
+
+    # Run entity and confirm success
+    spawn(transfer(
+        amount = 1.23,
+        from_account = "from-account",
+        to_account = "to-account",
+    ))!.entity.result()!
+
+    # Confirm called mocks
+    assert.true(actual = called_withdraw)!
+    assert.true(actual = called_deposit)!
+}

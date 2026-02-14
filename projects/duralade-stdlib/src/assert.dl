@@ -1,0 +1,68 @@
+import duralade.bool
+import duralade.error
+
+out func assert {
+    in :bool
+    in message = "assertion failed"
+    out! :error?
+
+    if !in {
+        error::fail(message)!
+    }
+}
+
+out func equal {
+    in actual: any
+    in expected: any
+    in message = "values not equal"
+    out! :error?
+
+    if actual != expected {
+        error::fail(message)!
+    }
+}
+
+out func fail {
+    in message = "failure"
+    out! :error = error::simple(message)
+}
+
+out func false {
+    in actual: bool
+    in message = "expected false"
+    out! :error?
+
+    if actual {
+        error::fail(message)!
+    }
+}
+
+out func nil {
+    in actual: any
+    in message = "expected nil"
+    out! :error?
+
+    if actual != nil {
+        error::fail(message)!
+    }
+}
+
+out func not_nil {
+    in actual: any
+    in message = "expected non-nil"
+    out! :error?
+
+    if actual == nil {
+        error::fail(message)!
+    }
+}
+
+out func true {
+    in actual: bool
+    in message = "expected true"
+    out! :error?
+
+    if !actual {
+        error::fail(message)!
+    }
+}

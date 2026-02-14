@@ -1,0 +1,85 @@
+import duralade.assert
+import duralade.test
+
+out data widget {
+    x: int
+
+    out view func get_x {
+        out result = x
+    }
+
+    out view func transform {
+        in factor: int
+        out result = x * factor
+    }
+
+    out view func transform_defaulted {
+        in factor = 2
+        out result = x * factor
+    }
+}
+
+func apply_no_default {
+    in cb: func {
+        in factor: int
+        out result: int
+    }
+    in factor: int
+    out result = cb(factor).result
+}
+
+func apply_with_default {
+    in cb: func {
+        in factor: int = ???
+        out result: int
+    }
+    out without_arg = cb().result
+    out with_arg = cb(factor = 10).result
+}
+
+func get_value {
+    in cb: func {
+        out result: int
+    }
+    out result = cb().result
+}
+
+@test
+func member_func_extra_default_ignored {
+    out! :error?
+
+    w := widget(x = 5)
+    # transform_defaulted has a default, but target doesn't require one - just pass factor
+    r := apply_no_default(cb = w.transform_defaulted, factor = 3)
+    assert::equal(actual = r.result, expected = 15)!
+}
+
+@test
+func member_func_matching_fields {
+    out! :error?
+
+    w := widget(x = 5)
+    r := apply_no_default(cb = w.transform, factor = 3)
+    assert::equal(actual = r.result, expected = 15)!
+}
+
+@test
+func member_func_no_args {
+    out! :error?
+
+    w := widget(x = 42)
+    r := get_value(cb = w.get_x)
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+@test
+func member_func_with_default_called_both_ways {
+    out! :error?
+
+    w := widget(x = 5)
+    r := apply_with_default(cb = w.transform_defaulted)
+    # with_arg: 5 * 10 = 50
+    assert::equal(actual = r.with_arg, expected = 50)!
+    # without_arg: 5 * 2 = 10 (uses default factor = 2)
+    assert::equal(actual = r.without_arg, expected = 10)!
+}

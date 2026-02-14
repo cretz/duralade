@@ -1,0 +1,54 @@
+import duralade.assert
+import duralade.test
+
+entity counter {
+    in start: int
+    value count: int
+
+    init {
+        count = start
+    }
+
+    out func get_count {
+        out value: int
+        value = count
+    }
+
+    out func increment {
+        count += 1
+    }
+}
+
+entity simple {
+    inout x: int
+    inout y: int
+}
+
+@test
+func construct_and_access_fields {
+    out! :error?
+
+    s := simple(x = 10, y = 20)
+    assert::equal(actual = s.x, expected = 10)!
+    assert::equal(actual = s.y, expected = 20)!
+}
+
+@test
+func construct_with_init {
+    out! :error?
+
+    c := counter(start = 5)
+    r := c.get_count()
+    assert::equal(actual = r.value, expected = 5)!
+}
+
+@test
+func member_func_mutates_state {
+    out! :error?
+
+    c := counter(start = 0)
+    c.increment()
+    c.increment()
+    r := c.get_count()
+    assert::equal(actual = r.value, expected = 2)!
+}

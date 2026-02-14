@@ -13,9 +13,16 @@ This document contains design notes and API documentation for the Duralade stand
 The standard library consists of modules under the `duralade` namespace. A blessed set of these modules form the "prelude" - automatically available without explicit imports.
 
 - All stdlib modules are sub-modules of `duralade` (e.g., `duralade.array`, `duralade.map`)
-- Prelude modules can be used without qualification (e.g., `array` instead of `duralade.array`)
-- Non-prelude modules require explicit import: `import duralade.http`
-- Modules can be explicitly imported even if in prelude for clarity: `import duralade.array`
+- Prelude modules are implicitly imported - their declarations are available without qualification
+- Non-prelude modules require explicit import: `import duralade.assert`
+- Modules can be explicitly imported even if in prelude for clarity: `import duralade.error`
+- TODO: Projects can opt out of prelude via `duralade.toml` configuration
+
+#### Prelude modules
+
+Only `duralade.error` is in the prelude. This makes the `error` type and `error.simple`/`error.fail` available everywhere without imports, since error handling is fundamental to the language.
+
+All other stdlib modules (assert, test, array, map, str, etc.) require explicit imports.
 
 ### Naming Conventions
 
@@ -86,7 +93,7 @@ TODO: Minimal but complete, composable, prefer small focused functions
     - `view func pow(exp: int) -> int`
   - `view func from_str(value: str) -> int?`
 - iter
-  - `type iter[intype t] = func { implicit :yielder[t] }`
+  - `type iter[intype t] = func { in :yielder[t] }`
   - `type yielder[intype t] = func { in value: t, out continue: bool }`
 - json
   - TODO

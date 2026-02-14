@@ -1,0 +1,54 @@
+# Duplicate fields in data
+data dupe_data_fields {
+    x: int
+    x: str
+    ^ @@ERROR: Duplicate member name 'x'
+}
+
+# Duplicate member funcs in data
+data dupe_data_funcs {
+    func foo {}
+    func foo {}
+         ^^^ @@ERROR: Duplicate member name 'foo'
+}
+
+# Field and member func with same name
+data field_func_clash {
+    value: int
+    func value {}
+         ^^^^^ @@ERROR: Duplicate member name 'value'
+}
+
+# Duplicate fields in entity
+entity dupe_entity_fields {
+    in x: int
+    in x: str
+       ^ @@ERROR: Duplicate member name 'x'
+}
+
+# Duplicate member funcs in entity
+entity dupe_entity_funcs {
+    func foo {}
+    func foo {}
+         ^^^ @@ERROR: Duplicate member name 'foo'
+}
+
+# Field and member func clash in entity
+entity entity_field_func_clash {
+    in name: str
+    func name {}
+         ^^^^ @@ERROR: Duplicate member name 'name'
+}
+
+# Duplicate fields in func
+func dupe_func_fields {
+    in x: int
+    in x: str
+       ^ @@ERROR: Duplicate field name 'x'
+}
+
+# Duplicate constructs at module level
+func thing {}
+
+func thing {}
+     ^^^^^ @@ERROR: Duplicate construct name 'thing'

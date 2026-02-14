@@ -1,0 +1,14 @@
+# Cases where type annotations are NOT redundant (should not trigger strict)
+
+# No default value - annotation required
+data required_fields {
+    x: int
+    y: str
+}
+
+# Annotation widens the type
+func not_redundant_widening {
+    out x: any = 1
+    a := x
+         ^ @@TYPE: any
+}

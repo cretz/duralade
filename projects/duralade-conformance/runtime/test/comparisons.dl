@@ -1,0 +1,92 @@
+# TODO: data == data (structural equality)
+# TODO: list/array == list/array
+# TODO: map == map
+# TODO: < / > on floats
+# TODO: mixed-type equality (int vs nil, str vs int, etc.)
+
+import duralade.assert
+import duralade.test
+
+@test
+func equal_bools {
+    out! :error?
+
+    assert::equal(actual = true == true, expected = true)!
+    assert::equal(actual = true == false, expected = false)!
+}
+
+@test
+func equal_ints {
+    out! :error?
+
+    assert::equal(actual = 1 == 1, expected = true)!
+    assert::equal(actual = 1 == 2, expected = false)!
+}
+
+@test
+func equal_nil {
+    out! :error?
+
+    assert::equal(actual = nil == nil, expected = true)!
+    assert::equal(actual = nil != nil, expected = false)!
+}
+
+@test
+func equal_strings {
+    out! :error?
+
+    assert::equal(actual = "hello" == "hello", expected = true)!
+    assert::equal(actual = "hello" == "world", expected = false)!
+}
+
+@test
+func greater_equal {
+    out! :error?
+
+    assert::equal(actual = 2 >= 1, expected = true)!
+    assert::equal(actual = 1 >= 1, expected = true)!
+    assert::equal(actual = 1 >= 2, expected = false)!
+}
+
+@test
+func greater_than {
+    out! :error?
+
+    assert::equal(actual = 2 > 1, expected = true)!
+    assert::equal(actual = 1 > 2, expected = false)!
+    assert::equal(actual = 1 > 1, expected = false)!
+}
+
+@test
+func less_equal {
+    out! :error?
+
+    assert::equal(actual = 1 <= 2, expected = true)!
+    assert::equal(actual = 1 <= 1, expected = true)!
+    assert::equal(actual = 2 <= 1, expected = false)!
+}
+
+@test
+func less_than {
+    out! :error?
+
+    assert::equal(actual = 1 < 2, expected = true)!
+    assert::equal(actual = 2 < 1, expected = false)!
+    assert::equal(actual = 1 < 1, expected = false)!
+}
+
+@test
+func not_equal_ints {
+    out! :error?
+
+    assert::equal(actual = 1 != 2, expected = true)!
+    assert::equal(actual = 1 != 1, expected = false)!
+}
+
+@test
+func not_equal_strings {
+    out! :error?
+
+    assert::equal(actual = "hello" != "world", expected = true)!
+    assert::equal(actual = "hello" != "hello", expected = false)!
+}

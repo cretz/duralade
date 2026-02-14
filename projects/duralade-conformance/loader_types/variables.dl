@@ -1,0 +1,32 @@
+# Variable and identifier type tracking
+
+func ident_after_assign {
+    a := 10
+    b := a
+         ^ @@TYPE: duralade.int::int
+    c := "hello"
+    d := c
+         ^ @@TYPE: duralade.str::str
+    e := true
+    f := e
+         ^ @@TYPE: duralade.bool::bool
+    g := 3.14
+    h := g
+         ^ @@TYPE: duralade.float::float
+    i := h
+         ^ @@TYPE: duralade.float::float
+}
+
+func ident_after_reassign {
+    x := 10
+    y := x
+         ^ @@TYPE: duralade.int::int
+    z := x + 5
+         ^^^^^ @@TYPE: duralade.int::int
+}
+
+func var_explicit_type {
+    a := 10
+    b := a
+         ^ @@TYPE: duralade.int::int
+}

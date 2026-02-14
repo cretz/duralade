@@ -1,19 +1,27 @@
-# Duralade Conformance Test Suite
+# Duralade Conformance Tests
 
-This directory contains the conformance tests for the Duralade language specification.
+Run by the `duralade-conformance-harness` crate.
 
-These tests are implementation-agnostic - they're pure Duralade code with annotations indicating expected behavior.
+## `parser/`
 
-## Structure
+Single-file parse failure tests. Each `.dl` is parsed in isolation and is expected to produce parse/strict diagnostics.
+Expected errors are marked with `^` carets aligned under the error span followed by `@@ERROR: message` or `@@STRICT: message` (strict-mode warnings). The harness strips these lines before parsing and matches actual errors by position and message substring.
 
-- `parser/` - Tests for parsing and syntax validation
-- `types/` - Tests for type system behavior
-- `runtime/` - Tests for runtime execution and semantics
+## `loader/`
 
-## Test Format
+Loader pipeline failure tests (imports, types, annotations). Each `.dl` is loaded with stdlib and is expected to produce load diagnostics.
+Same `@@ERROR` caret format as parser tests.
 
-TODO: Define the format for test annotations and expected results.
+## `loader_types/`
 
-## Test Harness
+Type inference assertion tests. Each `.dl` is loaded with stdlib and must produce zero errors. Expected types are marked with `^` carets aligned under an expression followed by `@@TYPE: typename`. The harness finds the AST node at that exact byte range in the `TypeTable` and compares `Type::display()` output against the expected string.
 
-The `duralade-conformance-harness` crate provides the test runner and assertion framework.
+## `runtime/`
+
+A normal Duralade project with tests. Success-path compatibility tests belong here.
+
+## `project/`
+
+Multi-module project tests. Each subdirectory is a standalone project (`duralade.toml` + `src/` + `test/`). Same `@test` function format as `runtime/`.
+
+- `basic/` - spawns an entity and verifies its result.

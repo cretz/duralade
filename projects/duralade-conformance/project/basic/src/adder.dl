@@ -1,0 +1,5 @@
+out entity adder {
+    run {
+        out value = 1 + 1
+    }
+}

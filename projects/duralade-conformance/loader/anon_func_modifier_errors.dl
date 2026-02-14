@@ -1,0 +1,37 @@
+func bad_in_for_inout {
+    needs_inout(cb = func { in v: int })
+                     ^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: field 'v' modifier mismatch: expected inout, got in
+}
+
+func bad_in_for_out {
+    needs_out(cb = func { in v: int })
+                   ^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: field 'v' modifier mismatch: expected out, got in
+}
+
+func bad_out_for_in {
+    needs_in(cb = func { out v: int })
+                  ^^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: field 'v' modifier mismatch: expected in, got out
+}
+
+func bad_out_for_inout {
+    needs_inout(cb = func { out v: int })
+                     ^^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: field 'v' modifier mismatch: expected inout, got out
+}
+
+func needs_in {
+    in cb: func {
+        in v: int
+    }
+}
+
+func needs_inout {
+    in cb: func {
+        inout v: int
+    }
+}
+
+func needs_out {
+    in cb: func {
+        out v: int
+    }
+}

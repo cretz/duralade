@@ -1,0 +1,60 @@
+import duralade.assert
+import duralade.test
+
+out entity target {
+    run {
+        out value = 42
+    }
+}
+
+entity ping_pong {
+    value curr = "one"
+
+    func do_stuff {
+        out! :error?
+
+        curr = "two"
+        wait(curr != "two")!
+        curr = "four"
+        wait(curr != "four")!
+        curr = "six"
+    }
+
+    run {
+        out result: string?
+        out! :error?
+
+        wait(curr != "one")!
+        curr = "three"
+        wait(curr != "three")!
+        curr = "five"
+        wait(curr != "five")!
+        result = curr
+    }
+}
+
+@test
+func test_spawn_no_error {
+    out! :error?
+
+    entity := spawn(target())!.entity
+    assert::equal(actual = entity != nil, expected = true)!
+}
+
+@test
+func test_spawn_ping_pong {
+    out! :error?
+
+    ref := spawn(ping_pong())!.entity
+    ref->do_stuff()!
+    assert::equal(actual = ref.result()!.result, expected = "six")!
+}
+
+@test
+func test_spawn_result_value {
+    out! :error?
+
+    ref := spawn(target())!.entity
+    r := ref.result()!
+    assert::equal(actual = r.value, expected = 42)!
+}

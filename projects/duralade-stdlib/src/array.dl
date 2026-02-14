@@ -1,0 +1,53 @@
+import duralade.int
+import duralade.iter
+
+out builtin data array {
+    intype t: anylocal
+
+    out builtin view func get {
+        in index: int
+        out result: t?
+    }
+
+    out view func iter {
+        in :iter::yielder[t]
+
+        index := 0
+        for index < len().result {
+            value := get(index).result
+            if !yielder.yield(value).active {
+                break
+            }
+            index += 1
+        }
+    }
+
+    out builtin view func len {
+        out result: int
+    }
+
+    out builtin func push {
+        in value: t
+    }
+
+    out builtin func remove {
+        in index: int
+        out result: t?
+    }
+
+    out builtin func set {
+        in index: int
+        in value: t
+        out old_value: t
+    }
+}
+
+out func from_iter {
+    intype t: anylocal
+    in iter: func { in :iter::yielder[t] }
+    out result: array[t] = []
+
+    for value in iter {
+        result.push(value)
+    }
+}

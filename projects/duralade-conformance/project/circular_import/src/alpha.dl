@@ -1,0 +1,11 @@
+import circular_import.beta
+
+out data alpha_thing {
+    name: str
+}
+
+out func make_pair {
+    in a: alpha_thing
+    in b: beta::beta_thing
+    out result = a.name
+}

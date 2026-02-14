@@ -1,0 +1,54 @@
+# Errors: member func passed to anon func type with field mismatches,
+# and default (= ???) mismatches
+
+out data widget {
+    x: int
+
+    out func get_x {
+        out result = x
+    }
+
+    out func transform {
+        in factor: int
+        out result = x * factor
+    }
+}
+
+func missing_default {
+    w := widget(x = 1)
+    needs_defaulted(cb = w.transform)
+                         ^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: field 'factor' missing required default
+}
+
+func missing_field {
+    w := widget(x = 1)
+    needs_two_in(cb = w.get_x)
+                      ^^^^^^^ @@ERROR: argument 'cb' type mismatch: missing field 'factor'
+}
+
+func needs_defaulted {
+    in cb: func {
+        in factor: int = ???
+        out result: int
+    }
+}
+
+func needs_str_in {
+    in cb: func {
+        in factor: str
+        out result: int
+    }
+}
+
+func needs_two_in {
+    in cb: func {
+        in factor: int
+        out result: int
+    }
+}
+
+func wrong_field_type {
+    w := widget(x = 1)
+    needs_str_in(cb = w.transform)
+                      ^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: expected str, got int
+}

@@ -1,0 +1,55 @@
+# Field access type resolution and chained inference
+
+data coords {
+    x: int
+    y: int
+}
+
+# Field access on data constructor
+func access_data_field {
+    p := coords(x = 3, y = 4)
+    a := p.x
+         ^^^ @@TYPE: duralade.int::int
+}
+
+# Simple field access on invocation result
+func access_func_out {
+    a := get_name().result
+         ^^^^^^^^^^^^^^^^^ @@TYPE: duralade.str::str
+}
+
+# Chained: func returns data, access field on that
+func access_func_returning_data {
+    a := get_coords().result
+         ^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.field_access::coords
+    b := get_coords().result.x
+         ^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+# Multi-out func field access
+func access_multi_out {
+    a := get_offset().dx
+         ^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+    b := get_offset().dy
+         ^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+# Field access on variable holding func result
+func access_via_variable {
+    r := get_offset()
+    a := r.dx
+         ^^^^ @@TYPE: duralade.int::int
+}
+
+func get_coords {
+    out result = coords(x = 1, y = 2)
+}
+
+func get_name {
+    out result = "hello"
+}
+
+func get_offset {
+    out dx = 10
+    out dy = 20
+}

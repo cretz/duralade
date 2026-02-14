@@ -1,0 +1,32 @@
+import duralade.assert
+import duralade.test
+
+@test
+func and_operator {
+    out! :error?
+
+    assert::equal(actual = true && true, expected = true)!
+    assert::equal(actual = true && false, expected = false)!
+    assert::equal(actual = false && true, expected = false)!
+    assert::equal(actual = false && false, expected = false)!
+}
+
+@test
+func combined_logic {
+    out! :error?
+
+    x := 5
+    assert::equal(actual = x > 0 && x < 10, expected = true)!
+    assert::equal(actual = x > 10 || x < 3, expected = false)!
+    assert::equal(actual = x > 10 || x == 5, expected = true)!
+}
+
+@test
+func or_operator {
+    out! :error?
+
+    assert::equal(actual = true || true, expected = true)!
+    assert::equal(actual = true || false, expected = true)!
+    assert::equal(actual = false || true, expected = true)!
+    assert::equal(actual = false || false, expected = false)!
+}

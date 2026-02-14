@@ -1,0 +1,32 @@
+import duralade.assert
+import duralade.error
+import duralade.int
+import duralade.test
+
+@test
+func from_str_empty_returns_nil {
+    out! :error?
+
+    assert::nil(actual = int::from_str(str = "").result)!
+}
+
+@test
+func from_str_invalid_returns_nil {
+    out! :error?
+
+    assert::nil(actual = int::from_str(str = "abc").result)!
+}
+
+@test
+func from_str_negative {
+    out! :error?
+
+    assert::equal(actual = int::from_str(str = "-7").result, expected = -7)!
+}
+
+@test
+func from_str_valid {
+    out! :error?
+
+    assert::equal(actual = int::from_str(str = "42").result, expected = 42)!
+}

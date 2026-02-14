@@ -1,0 +1,5 @@
+@test
+ ^^^^ @@ERROR: cannot resolve type 'test'
+func missing_import {
+    out! :error?
+}

@@ -1,0 +1,42 @@
+# TODO: string concatenation with + (needs interpreter support)
+# TODO: string interpolation
+# TODO: raw strings
+# TODO: str.len() view method
+
+import duralade.assert
+import duralade.test
+
+@test
+func empty_string {
+    out! :error?
+
+    x := ""
+    assert::equal(actual = x, expected = "")!
+    assert::equal(actual = x == "", expected = true)!
+}
+
+@test
+func string_comparison {
+    out! :error?
+
+    assert::equal(actual = "a" < "b", expected = true)!
+    assert::equal(actual = "b" > "a", expected = true)!
+    assert::equal(actual = "a" <= "a", expected = true)!
+}
+
+@test
+func string_equality {
+    out! :error?
+
+    assert::equal(actual = "abc" == "abc", expected = true)!
+    assert::equal(actual = "abc" == "def", expected = false)!
+    assert::equal(actual = "abc" != "def", expected = true)!
+}
+
+@test
+func string_literal {
+    out! :error?
+
+    x := "hello"
+    assert::equal(actual = x, expected = "hello")!
+}

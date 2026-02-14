@@ -1,0 +1,352 @@
+import duralade.assert
+import duralade.test
+
+data color {
+    b: int
+    g: int
+    r: int
+}
+
+data point {
+    x: int
+    y: int
+}
+
+@test
+func as_anon_data_matches_structurally {
+    out! :error?
+
+    p := point(x = 5, y = 10)
+    r := as_anon_xy_helper(x = p)!
+    assert::equal(actual = r.result, expected = 5)!
+}
+
+@test
+func as_anon_data_rejects_missing_field {
+    out! :error?
+
+    d := data { a = 1 }
+    r := as_anon_xy_helper(x = d)
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+func as_anon_xy_helper {
+    in x: any
+    out result: int?
+    out! :error?
+
+    y := x as! data {
+        x: int
+        y: int
+    }
+    result = y.x
+}
+
+@test
+func as_bang_fails {
+    out! :error?
+
+    r := as_bang_int_helper(x = "not an int")
+    assert::equal(actual = r.error.message, expected = "type narrowing: value does not match expected type")!
+}
+
+func as_bang_int_helper {
+    in x: any
+    out result: int?
+    out! :error?
+
+    y := x as! int
+    result = y
+}
+
+@test
+func as_bang_succeeds {
+    out! :error?
+
+    r := as_bang_int_helper(x = 42)!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+func as_bool_helper {
+    in x: any
+    out result: bool?
+    out! :error?
+
+    y := x as! bool
+    result = y
+}
+
+@test
+func as_bool_matches_bool {
+    out! :error?
+
+    r := as_bool_helper(x = true)!
+    assert::equal(actual = r.result, expected = true)!
+}
+
+@test
+func as_bool_rejects_int {
+    out! :error?
+
+    r := as_bool_helper(x = 0)
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func as_else_fails_returns_custom {
+    out! :error?
+
+    r := as_else_int_helper(x = "not an int")
+    assert::equal(actual = r.error.message, expected = "not int")!
+}
+
+func as_else_int_helper {
+    in x: any
+    out result: int?
+    out! :error?
+
+    y := x as int else! error::simple(message = "not int")
+    result = y
+}
+
+@test
+func as_else_succeeds {
+    out! :error?
+
+    r := as_else_int_helper(x = 42)!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+func as_float_helper {
+    in x: any
+    out result: float?
+    out! :error?
+
+    y := x as! float
+    result = y
+}
+
+@test
+func as_float_matches_float {
+    out! :error?
+
+    r := as_float_helper(x = 3.14)!
+    assert::equal(actual = r.result, expected = 3.14)!
+}
+
+@test
+func as_float_rejects_int {
+    out! :error?
+
+    r := as_float_helper(x = 3)
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+func as_int_helper {
+    in x: any
+    out result: int?
+    out! :error?
+
+    y := x as! int
+    result = y
+}
+
+@test
+func as_int_matches_int {
+    out! :error?
+
+    r := as_int_helper(x = 42)!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+@test
+func as_int_rejects_str {
+    out! :error?
+
+    r := as_int_helper(x = "hello")
+    assert::equal(actual = r.result, expected = nil)!
+    assert::equal(actual = r.error.message, expected = "type narrowing: value does not match expected type")!
+}
+
+func as_named_data_helper {
+    in x: any
+    out result: point?
+    out! :error?
+
+    y := x as! point
+    result = y
+}
+
+@test
+func as_named_data_matches {
+    out! :error?
+
+    p := point(x = 1, y = 2)
+    r := as_named_data_helper(x = p)!
+    assert::equal(actual = r.result.x, expected = 1)!
+    assert::equal(actual = r.result.y, expected = 2)!
+}
+
+@test
+func as_named_data_rejects_different_type {
+    out! :error?
+
+    c := color(b = 0, g = 0, r = 255)
+    r := as_named_data_helper(x = c)
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func as_named_data_rejects_primitive {
+    out! :error?
+
+    r := as_named_data_helper(x = 42)
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func as_nilable_accepts_nil {
+    out! :error?
+
+    r := as_nilable_int_helper(x = nil)!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func as_nilable_accepts_value {
+    out! :error?
+
+    r := as_nilable_int_helper(x = 42)!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+func as_nilable_int_helper {
+    in x: any
+    out result: int?
+    out! :error?
+
+    y := x as! int?
+    result = y
+}
+
+@test
+func as_nilable_rejects_wrong_inner_type {
+    out! :error?
+
+    r := as_nilable_int_helper(x = "hello")
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+func as_str_helper {
+    in x: any
+    out result: str?
+    out! :error?
+
+    y := x as! str
+    result = y
+}
+
+@test
+func as_str_matches_str {
+    out! :error?
+
+    r := as_str_helper(x = "hello")!
+    assert::equal(actual = r.result, expected = "hello")!
+}
+
+@test
+func as_str_rejects_int {
+    out! :error?
+
+    r := as_str_helper(x = 42)
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func if_as_int_enters_else_for_str {
+    out! :error?
+
+    x := "hello"
+    var entered_else = false
+    if val := x as int {
+        assert::fail(message = "should not have entered then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func if_as_int_enters_then {
+    out! :error?
+
+    x := 42
+    if val := x as int {
+        assert::equal(actual = val, expected = 42)!
+    } else {
+        assert::fail(message = "should have entered then block")!
+    }
+}
+
+@test
+func if_as_multi_all_match {
+    out! :error?
+
+    a := 10
+    b := "hello"
+    if x, y := a as int, b as str {
+        assert::equal(actual = x, expected = 10)!
+        assert::equal(actual = y, expected = "hello")!
+    } else {
+        assert::fail(message = "should have entered then block")!
+    }
+}
+
+@test
+func if_as_multi_one_fails {
+    out! :error?
+
+    a := 10
+    b := 20
+    var entered_else = false
+    if x, y := a as int, b as str {
+        assert::fail(message = "should not have entered then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func if_as_named_data_enters_else_wrong_type {
+    out! :error?
+
+    c := color(b = 3, g = 2, r = 1)
+    var entered_else = false
+    if val := c as point {
+        assert::fail(message = "should not have entered then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func if_as_named_data_enters_then {
+    out! :error?
+
+    p := point(x = 10, y = 20)
+    if val := p as point {
+        assert::equal(actual = val.x, expected = 10)!
+    } else {
+        assert::fail(message = "should have entered then block")!
+    }
+}
+
+func my_adder {
+    in a: int
+    in b: int
+    out result: int
+
+    result = a + b
+}

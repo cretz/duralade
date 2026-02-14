@@ -1,0 +1,19 @@
+import privlib.stuff
+import privlib._internal
+^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: cannot import 'privlib._internal': underscore-prefixed modules are project-private
+
+func access_private_construct {
+    stuff::_private_func()
+    ^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: '_private_func' in 'stuff' is project-private (underscore prefix)
+}
+
+func access_private_data {
+    stuff::_private_data(x = 1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: '_private_data' in 'stuff' is project-private (underscore prefix)
+}
+
+func access_private_field {
+    t := stuff::public_thing(x = 1, _secret = 2)
+    v := t._secret
+           ^^^^^^^ @@ERROR: field '_secret' on 'public_thing' is project-private (underscore prefix)
+}

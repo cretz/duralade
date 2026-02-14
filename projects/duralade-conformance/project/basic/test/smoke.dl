@@ -1,0 +1,11 @@
+import basic.adder
+import duralade.assert
+import duralade.test
+
+@test
+func spawn_and_check {
+    out! :error?
+
+    ref := spawn(adder::adder())!.entity
+    assert::equal(actual = ref.result()!.value, expected = 2)!
+}

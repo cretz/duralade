@@ -1,0 +1,70 @@
+# Serializability boundary errors
+
+data has_array_of_funcs {
+    items: array[t = func {
+        out value: int
+    }]
+}
+
+data has_func_field {
+    cb: func {
+        out value: int
+    }
+}
+
+data has_nested_non_serializable {
+    inner: has_array_of_funcs
+}
+
+func anylocal_accepts_func {
+    cb := func { out value = 1 }
+    var a: anylocal = cb
+}
+
+func assign_func_to_any {
+    cb := func { out value = 1 }
+    var a: any = cb
+                 ^^ @@ERROR: cannot assign
+}
+
+func assign_non_serializable_array_to_any {
+    arr := [func { out value = 1 }]
+    var a: any = arr
+                 ^^^ @@ERROR: cannot assign
+}
+
+func assign_non_serializable_data_to_any {
+    x := has_func_field(cb = func { out value = 1 })
+    var a: any = x
+                 ^ @@ERROR: cannot assign
+}
+
+func assign_serializable_to_any {
+    arr := [1, 2, 3]
+    var a: any = arr
+}
+
+extern extern_with_deep_non_serializable {
+    in item: has_nested_non_serializable
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: extern field 'item' must be a serializable type
+}
+
+extern extern_with_func_param {
+    in cb: func { out value: int }
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: extern field 'cb' must be a serializable type
+}
+
+extern extern_with_func_result {
+    out cb: func { out value: int }
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: extern field 'cb' must be a serializable type
+}
+
+extern extern_with_non_serializable_data {
+    in item: has_func_field
+    ^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: extern field 'item' must be a serializable type
+}
+
+extern extern_with_serializable_param {
+    in count: int
+    out name: str
+}

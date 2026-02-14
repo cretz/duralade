@@ -1,0 +1,228 @@
+import duralade.assert
+import duralade.iter
+import duralade.test
+
+@test
+func basic_range {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(end = 5) {
+        sum += x
+    }
+    # 0 + 1 + 2 + 3 + 4 = 10
+    assert::equal(actual = sum, expected = 10)!
+}
+
+@test
+func break_from_for_in {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(end = 100) {
+        if x == 3 {
+            break
+        }
+        sum += x
+    }
+    # 0 + 1 + 2 = 3
+    assert::equal(actual = sum, expected = 3)!
+}
+
+@test
+func break_immediately {
+    out! :error?
+
+    count := 0
+    for x in iter::range(end = 100) {
+        break
+    }
+    assert::equal(actual = count, expected = 0)!
+}
+
+@test
+func break_inner_continue_outer {
+    out! :error?
+
+    count := 0
+    for:outer x in iter::range(end = 4) {
+        for y in iter::range(end = 4) {
+            if y >= 2 {
+                break
+            }
+            count += 1
+        }
+        if x == 2 {
+            continue:outer
+        }
+    }
+    # x=0: y=0,1 (count+=2), x=1: y=0,1 (count+=2),
+    # x=2: y=0,1 (count+=2) then continue, x=3: y=0,1 (count+=2)
+    assert::equal(actual = count, expected = 8)!
+}
+
+@test
+func break_labeled {
+    out! :error?
+
+    result := 0
+    for:outer x in iter::range(end = 3) {
+        for y in iter::range(end = 3) {
+            if y == 1 {
+                break:outer
+            }
+            result += 1
+        }
+    }
+    # Only x=0, y=0 runs before break:outer
+    assert::equal(actual = result, expected = 1)!
+}
+
+@test
+func continue_in_for_in {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(end = 6) {
+        if x % 2 == 0 {
+            continue
+        }
+        sum += x
+    }
+    # odd numbers: 1 + 3 + 5 = 9
+    assert::equal(actual = sum, expected = 9)!
+}
+
+@test
+func continue_labeled {
+    out! :error?
+
+    count := 0
+    for:outer x in iter::range(end = 3) {
+        for y in iter::range(end = 3) {
+            if y == 1 {
+                continue:outer
+            }
+            count += 1
+        }
+    }
+    # Each outer iteration: y=0 increments count, y=1 skips to outer
+    assert::equal(actual = count, expected = 3)!
+}
+
+@test
+func empty_range {
+    out! :error?
+
+    count := 0
+    for x in iter::range(end = 0) {
+        count += 1
+    }
+    assert::equal(actual = count, expected = 0)!
+}
+
+@test
+func iter_order_verified {
+    out! :error?
+
+    prev := 0
+    sum := 0
+    for x in iter::range(end = 5) {
+        assert::equal(actual = x, expected = prev)!
+        prev += 1
+        sum += x
+    }
+    assert::equal(actual = sum, expected = 10)!
+    assert::equal(actual = prev, expected = 5)!
+}
+
+@test
+func iter_stored_in_variable {
+    out! :error?
+
+    r := iter::range(end = 4)
+    sum := 0
+    for x in r {
+        sum += x
+    }
+    # 0 + 1 + 2 + 3 = 6
+    assert::equal(actual = sum, expected = 6)!
+}
+
+@test
+func mixed_with_condition_loop {
+    out! :error?
+
+    total := 0
+    for x in iter::range(end = 3) {
+        i := 0
+        for i < x {
+            total += 1
+            i += 1
+        }
+    }
+    # x=0: 0 iterations, x=1: 1, x=2: 2 => total = 3
+    assert::equal(actual = total, expected = 3)!
+}
+
+@test
+func nested_for_in {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(end = 3) {
+        for y in iter::range(end = 3) {
+            sum += x * 10 + y
+        }
+    }
+    # (0,0)+(0,1)+(0,2)+(1,0)+(1,1)+(1,2)+(2,0)+(2,1)+(2,2)
+    # = 0+1+2+10+11+12+20+21+22 = 99
+    assert::equal(actual = sum, expected = 99)!
+}
+
+@test
+func range_with_start {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(start = 3, end = 6) {
+        sum += x
+    }
+    # 3 + 4 + 5 = 12
+    assert::equal(actual = sum, expected = 12)!
+}
+
+@test
+func range_with_start_and_step {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(start = 2, end = 12, step = 3) {
+        sum += x
+    }
+    # 2 + 5 + 8 + 11 = 26
+    assert::equal(actual = sum, expected = 26)!
+}
+
+@test
+func range_with_step {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(end = 10, step = 3) {
+        sum += x
+    }
+    # 0 + 3 + 6 + 9 = 18
+    assert::equal(actual = sum, expected = 18)!
+}
+
+@test
+func single_iteration {
+    out! :error?
+
+    val := -1
+    for x in iter::range(end = 1) {
+        val = x
+    }
+    assert::equal(actual = val, expected = 0)!
+}

@@ -1,12 +1,14 @@
+use std::collections::HashSet;
+
 use crate::model::*;
 
 use super::construct::{
     ConstructModifiers, expect_open_brace, parse_construct_header, parse_field, parse_func,
-    parse_modifiers, starts_with_keyword,
+    parse_modifiers, parse_native, starts_with_keyword,
 };
 use super::source;
 use super::stmt::parse_stmt;
-use super::{IndentOpener, ParseContext, ParseError};
+use super::{ParseContext, ParseError};
 
 /// Contents parsed from a construct body `{ ... }`
 #[derive(Default)]
@@ -27,6 +29,14 @@ pub(crate) struct BodyOptions {
     pub stmts: bool,
     pub funcs: bool,
     pub init_run: bool,
+}
+
+fn field_name(field: &Field) -> Option<&Ident> {
+    match &field.kind {
+        FieldKind::Var(v) => Some(&v.name),
+        FieldKind::Intype(i) => Some(&i.name),
+        FieldKind::Invalid(_) => None,
+    }
 }
 
 /// Peek past whitespace to check if '}' or EOF is next.
@@ -70,17 +80,35 @@ fn parse_member_func(
         ctx.add_parse_error(err);
     }
 
-    let func = parse_func(
-        ctx,
-        start_pos,
-        header.modifiers.view.is_some(),
-        header.modifiers.noblock.is_some(),
-    );
+    let builtin = header.modifiers.builtin.is_some();
+    let func = if builtin {
+        let native = parse_native(
+            ctx,
+            start_pos,
+            header.modifiers.view.is_some(),
+            header.modifiers.noblock.is_some(),
+        );
+        Func {
+            node_id: native.node_id,
+            view: native.view,
+            noblock: native.noblock,
+            fields: native.fields,
+            stmts: Vec::new(),
+        }
+    } else {
+        parse_func(
+            ctx,
+            start_pos,
+            header.modifiers.view.is_some(),
+            header.modifiers.noblock.is_some(),
+        )
+    };
 
     Construct {
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
         annotations,
         out: header.modifiers.out.is_some(),
+        builtin,
         name: header.name,
         kind: ConstructKind::Func(func),
     }
@@ -150,7 +178,7 @@ enum InitOrRun {
 pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyContents {
     debug_assert!(ctx.remaining().starts_with('{'));
     ctx.advance(1);
-    ctx.indent(IndentOpener::Brace);
+    ctx.indent(b'{');
 
     let mut contents = BodyContents::default();
 
@@ -159,18 +187,20 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
         // Annotations and modifiers are parsed as a shared prefix, then we
         // decide field vs func based on what follows.
         let mut field_phase = options.fields;
+        let mut seen_names: HashSet<Symbol> = HashSet::new();
 
         loop {
             if at_body_end(ctx) {
                 break;
             }
 
+            let pos_before = ctx.pos();
             ctx.parse_trivia();
             if ctx.remaining().is_empty() {
                 break;
             }
 
-            // Check for init/run (entity bodies) — before annotations
+            // Check for init/run (entity bodies) - before annotations
             if options.init_run
                 && (starts_with_keyword(ctx.remaining(), "init")
                     || starts_with_keyword(ctx.remaining(), "run"))
@@ -214,9 +244,14 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
                 || starts_with_keyword(ctx.remaining(), "func")
             {
                 field_phase = false;
-                contents
-                    .funcs
-                    .push(parse_member_func(ctx, item_start, annotations, modifiers));
+                let func = parse_member_func(ctx, item_start, annotations, modifiers);
+                if !seen_names.insert(func.name.name.clone()) {
+                    ctx.add_parse_error(ParseError::new(
+                        ctx.node_span(func.name.node_id),
+                        format!("Duplicate member name '{}'", func.name.name),
+                    ));
+                }
+                contents.funcs.push(func);
                 continue;
             }
 
@@ -230,6 +265,14 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
                     options.data_fields,
                 )
             {
+                if let Some(ident) = field_name(&field)
+                    && !seen_names.insert(ident.name.clone())
+                {
+                    ctx.add_parse_error(ParseError::new(
+                        ctx.node_span(ident.node_id),
+                        format!("Duplicate member name '{}'", ident.name),
+                    ));
+                }
                 contents.fields.push(field);
                 continue;
             }
@@ -240,12 +283,16 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
                 "Unrecognized content in body".to_string(),
             ));
             ctx.skip_past_end_of_line();
+            if ctx.pos() == pos_before {
+                break;
+            }
         }
     } else {
         // Func/init/run bodies: two-phase (fields then stmts)
 
         // Phase 1: fields
         if options.fields {
+            let mut seen_names: HashSet<Symbol> = HashSet::new();
             loop {
                 if at_body_end(ctx) {
                     break;
@@ -261,6 +308,14 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
                 if let Some(field) =
                     parse_field(ctx, item_start, annotations, None, options.data_fields)
                 {
+                    if let Some(ident) = field_name(&field)
+                        && !seen_names.insert(ident.name.clone())
+                    {
+                        ctx.add_parse_error(ParseError::new(
+                            ctx.node_span(ident.node_id),
+                            format!("Duplicate field name '{}'", ident.name),
+                        ));
+                    }
                     contents.fields.push(field);
                 } else {
                     break;
@@ -275,6 +330,7 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
                     break;
                 }
 
+                let pos_before = ctx.pos();
                 ctx.parse_trivia();
                 if ctx.remaining().is_empty() || at_body_end(ctx) {
                     break;
@@ -289,6 +345,9 @@ pub(crate) fn parse_body(ctx: &mut ParseContext, options: BodyOptions) -> BodyCo
                         "Unrecognized content in body".to_string(),
                     ));
                     ctx.skip_past_end_of_line();
+                    if ctx.pos() == pos_before {
+                        break;
+                    }
                 }
             }
         }

@@ -1,0 +1,21 @@
+import duralade.assert
+import duralade.test
+
+@test
+func bang_propagation {
+    out! :error?
+
+    var success = check_equals(actual = 1, expected = 1).error
+    assert::equal(actual = success, expected = nil)!
+
+    var failure = check_equals(actual = 1, expected = 2).error
+    assert::equal(actual = failure.message, expected = "values not equal")!
+}
+
+func check_equals {
+    in actual: int
+    in expected: int
+    out! :error?
+
+    assert::equal(actual, expected)!
+}

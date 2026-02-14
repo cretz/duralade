@@ -7,24 +7,27 @@ mod types;
 
 mod stmt;
 
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 use crate::model::*;
 
 const INDENT_WIDTH: usize = 4;
 
-/// Tracks what delimiter opened the current indent level.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub(crate) enum IndentOpener {
-    Brace,   // {
-    Bracket, // [
-    Paren,   // (
+/// Tracks what delimiter opened the current indent level and where.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct IndentOpener {
+    /// The delimiter byte: b'{', b'[', or b'('.
+    pub byte: u8,
+    /// Byte offset of the start of the line where this opener was pushed.
+    pub line_start: usize,
+    /// Expected indentation (in spaces) for content inside this opener.
+    pub indent: usize,
 }
 
 /// Parse a Duralade source file
-pub fn parse_source_file(source: String, file_path: PathBuf) -> ParseResult {
-    ParseContext::new(source, file_path).parse()
+pub fn parse_source_file(source: String, file_path: PathBuf, allow_builtin: bool) -> ParseResult {
+    ParseContext::new(source, file_path, allow_builtin).parse()
 }
 
 /// Result of parsing a source file
@@ -39,7 +42,7 @@ pub struct ParseResult {
 ///
 /// All ranges are byte offsets as `(start, end)` where end is **exclusive**
 /// (like Rust's `Range<usize>`). A range of `(5, 8)` covers bytes 5, 6, 7.
-/// Ranges must never be zero-width for display purposes — always point at
+/// Ranges must never be zero-width for display purposes - always point at
 /// at least one byte/character.
 #[derive(Debug, Clone)]
 pub struct ParseError {
@@ -117,8 +120,7 @@ pub(crate) struct ParseContext {
     /// Counter for allocating NodeIds
     next_node_id: u32,
 
-    /// Maps NodeIds to (start, end) byte positions
-    source_map: HashMap<NodeId, (usize, usize)>,
+    source_map: SourceMap,
 
     /// Comments collected while parsing trivia
     comments: Vec<Comment>,
@@ -129,7 +131,7 @@ pub(crate) struct ParseContext {
     /// Strict mode violations collected during parsing
     strict_mode_violations: Vec<ParseError>,
 
-    /// Stack of indent openers — length * INDENT_WIDTH gives expected indent level
+    /// Stack of indent openers, each carrying its expected indent level.
     indent_stack: Vec<IndentOpener>,
 
     /// When true, expression postfix parsing skips bare `as type` and bare `?`
@@ -143,6 +145,12 @@ pub(crate) struct ParseContext {
 
     /// Byte offset of the start of the current line (for line length checks)
     line_start: usize,
+
+    /// Depth of nested defer blocks. When > 0, `!` early return forms are rejected.
+    pub(crate) defer_depth: usize,
+
+    /// Whether `builtin` keyword is allowed (stdlib only).
+    pub(crate) allow_builtin: bool,
 }
 
 /// Snapshot of parse state for speculative parsing.
@@ -159,13 +167,15 @@ pub(crate) struct ParseSnapshot {
 
 impl ParseContext {
     /// Create a new parse context
-    fn new(source: String, file_path: PathBuf) -> Self {
+    fn new(source: String, file_path: PathBuf, allow_builtin: bool) -> Self {
+        let mut source_map = SourceMap::default();
+        source_map.line_offsets.push(0); // Line 1 starts at byte 0
         Self {
             source,
             pos: 0,
             file_path: file_path.to_string_lossy().to_string(),
             next_node_id: 0,
-            source_map: HashMap::new(),
+            source_map,
             comments: Vec::new(),
             parse_errors: Vec::new(),
             strict_mode_violations: Vec::new(),
@@ -173,14 +183,19 @@ impl ParseContext {
             suppress_narrowing_postfix: false,
             trivia_had_blank_line: false,
             line_start: 0,
+            defer_depth: 0,
+            allow_builtin,
         }
     }
 
     /// Get current position
     pub fn prev_byte(&self) -> Option<u8> {
-        if self.pos > 0 { Some(self.source.as_bytes()[self.pos - 1]) } else { None }
+        if self.pos > 0 {
+            Some(self.source.as_bytes()[self.pos - 1])
+        } else {
+            None
+        }
     }
-
 
     pub fn pos(&self) -> usize {
         self.pos
@@ -189,6 +204,18 @@ impl ParseContext {
     /// Get the remaining source from current position
     pub fn remaining(&self) -> &str {
         &self.source[self.pos..]
+    }
+
+    /// Get a slice of the source by absolute byte positions.
+    /// Useful when you need to refer back to already-consumed source text.
+    pub fn source_slice(&self, start: usize, end: usize) -> &str {
+        &self.source[start..end]
+    }
+
+    /// Get the source text of an identifier by its NodeId span.
+    pub fn ident_str(&self, ident: &Ident) -> &str {
+        let (start, end) = self.source_map.node_ranges[&ident.node_id];
+        &self.source[start..end]
     }
 
     /// Byte length of the next character at current position (0 if at end).
@@ -232,7 +259,11 @@ impl ParseContext {
 
     /// Get the (start, end) byte span for a node ID.
     pub fn node_span(&self, id: NodeId) -> (usize, usize) {
-        *self.source_map.get(&id).expect("NodeId not in source_map")
+        *self
+            .source_map
+            .node_ranges
+            .get(&id)
+            .expect("NodeId not in source_map")
     }
 
     /// Advance position by n bytes
@@ -261,11 +292,20 @@ impl ParseContext {
             }
         }
         self.line_start = self.pos + 1;
+        self.source_map.line_offsets.push(self.line_start);
     }
 
     /// Update line_start after consuming a multi-line token (e.g. raw string).
     /// Sets line_start to the start of the last line within the consumed range.
+    /// Also records line offsets for all newlines within the consumed range.
     pub fn sync_line_start(&mut self) {
+        let slice = &self.source[self.line_start..self.pos];
+        let mut offset = 0;
+        while let Some(i) = slice[offset..].find('\n') {
+            let new_line_start = self.line_start + offset + i + 1;
+            self.source_map.line_offsets.push(new_line_start);
+            offset += i + 1;
+        }
         if let Some(last_nl) = self.source[..self.pos].rfind('\n') {
             self.line_start = last_nl + 1;
         }
@@ -290,8 +330,13 @@ impl ParseContext {
     pub fn alloc_node_id(&mut self, start: usize, end: usize) -> NodeId {
         let id = NodeId(self.next_node_id);
         self.next_node_id += 1;
-        self.source_map.insert(id, (start, end));
+        self.source_map.node_ranges.insert(id, (start, end));
         id
+    }
+
+    /// Record the byte offset of an operator token for a given node.
+    pub fn set_op_position(&mut self, id: NodeId, pos: usize) {
+        self.source_map.op_positions.insert(id, pos);
     }
 
     /// Add a parse error
@@ -321,9 +366,9 @@ impl ParseContext {
     /// Restore state from a snapshot, discarding everything added since.
     pub fn restore(&mut self, snap: ParseSnapshot) {
         self.pos = snap.pos;
-        // Remove source_map entries for NodeIds allocated during speculation
         for id in snap.next_node_id..self.next_node_id {
-            self.source_map.remove(&NodeId(id));
+            self.source_map.node_ranges.remove(&NodeId(id));
+            self.source_map.op_positions.remove(&NodeId(id));
         }
         self.next_node_id = snap.next_node_id;
         self.parse_errors.truncate(snap.errors_len);
@@ -334,12 +379,28 @@ impl ParseContext {
 
     /// Current expected indentation level (in spaces)
     fn current_indent(&self) -> usize {
-        self.indent_stack.len() * INDENT_WIDTH
+        self.indent_stack.last().map_or(0, |o| o.indent)
     }
 
-    /// Increase expected indentation by one level
-    pub fn indent(&mut self, opener: IndentOpener) {
-        self.indent_stack.push(opener);
+    /// Increase expected indentation by one level.
+    /// Same-line absorption: if the top of the stack was opened on the same
+    /// line, the new opener inherits the same indent level instead of adding
+    /// another (so `f(handler = func {` is one indent level, not two).
+    pub fn indent(&mut self, byte: u8) {
+        let indent = if let Some(top) = self.indent_stack.last() {
+            if top.line_start == self.line_start {
+                top.indent // same line - absorb
+            } else {
+                top.indent + INDENT_WIDTH
+            }
+        } else {
+            INDENT_WIDTH
+        };
+        self.indent_stack.push(IndentOpener {
+            byte,
+            line_start: self.line_start,
+            indent,
+        });
     }
 
     /// Decrease expected indentation by one level
@@ -389,21 +450,36 @@ impl ParseContext {
         }
     }
 
-    /// Skip past end of current line (for error recovery). Does nothing if already past line end.
+    /// Skip past end of current line (for error recovery).
+    /// Stops before the matching closer for the current indent block so that
+    /// single-line forms like `data { x: int, BAD }` don't overshoot the `}`.
+    /// Does nothing if already past line end (at line start).
     pub fn skip_past_end_of_line(&mut self) {
-        // If at start of a line (already consumed the newline) or EOF, don't skip further
         if self.is_at_line_start() || self.remaining().is_empty() {
             return;
         }
-        // Skip past the newline
-        if let Some(newline_pos) = self.remaining().find('\n') {
-            self.advance(newline_pos);
-            self.on_newline();
-            self.advance(1);
-        } else {
-            // No newline found, skip to end
-            self.pos = self.source.len();
+        let closer = self.indent_stack.last().map(|o| match o.byte {
+            b'{' => b'}',
+            b'[' => b']',
+            b'(' => b')',
+            _ => b'}',
+        });
+        for (i, b) in self.remaining().bytes().enumerate() {
+            if b == b'\n' {
+                self.advance(i);
+                self.on_newline();
+                self.advance(1);
+                return;
+            }
+            if let Some(c) = closer
+                && b == c
+            {
+                self.advance(i);
+                return;
+            }
         }
+        // No newline or closer found, skip to end
+        self.pos = self.source.len();
     }
 
     /// Parse a qualified identifier (dot-separated identifiers)
@@ -590,7 +666,9 @@ impl ParseContext {
                     // Append to existing comment block or create new one
                     if last_line_was_comment {
                         if let Some(last_comment) = self.comments.last_mut() {
-                            if let Some(span) = self.source_map.get_mut(&last_comment.node_id) {
+                            if let Some(span) =
+                                self.source_map.node_ranges.get_mut(&last_comment.node_id)
+                            {
                                 span.1 = self.pos;
                             }
                             last_comment.lines.push(comment_line);
@@ -616,20 +694,29 @@ impl ParseContext {
                         // if-block inside a func body). Anything NOT at current_indent
                         // that matches the stack top is a (possibly misindented) closer.
                         // A closer char that doesn't match the stack top (e.g. `}` when
-                        // top is Bracket) means a missing closer — skip indent check.
-                        let outer_indent = self.current_indent().saturating_sub(INDENT_WIDTH);
+                        // top is Bracket) means a missing closer - skip indent check.
+                        // Walk back to find the parent indent level (first
+                        // ancestor with a strictly lower indent). Absorbed
+                        // entries share the same indent, so we skip past them.
+                        let cur = self.current_indent();
+                        let outer_indent = self
+                            .indent_stack
+                            .iter()
+                            .rev()
+                            .find(|o| o.indent < cur)
+                            .map_or(0, |o| o.indent);
                         let (matches_top, is_closer_char) =
                             match self.remaining().as_bytes().first() {
                                 Some(b'}') => (
-                                    self.indent_stack.last() == Some(&IndentOpener::Brace),
+                                    self.indent_stack.last().is_some_and(|o| o.byte == b'{'),
                                     true,
                                 ),
                                 Some(b']') => (
-                                    self.indent_stack.last() == Some(&IndentOpener::Bracket),
+                                    self.indent_stack.last().is_some_and(|o| o.byte == b'['),
                                     true,
                                 ),
                                 Some(b')') => (
-                                    self.indent_stack.last() == Some(&IndentOpener::Paren),
+                                    self.indent_stack.last().is_some_and(|o| o.byte == b'('),
                                     true,
                                 ),
                                 _ => (false, false),
@@ -642,8 +729,8 @@ impl ParseContext {
                             self.current_indent()
                         };
                         // Don't report indent errors for mismatched closers (e.g. `}`
-                        // when top is Bracket) — the caller will report the missing closer.
-                        if space_count != expected && !(is_closer_char && !matches_top) {
+                        // when top is Bracket) - the caller will report the missing closer.
+                        if space_count != expected && (!is_closer_char || matches_top) {
                             let range = if space_count == 0 {
                                 (self.pos, (self.pos + 1).min(self.source.len()))
                             } else {
@@ -670,20 +757,20 @@ impl ParseContext {
         // Track max seen; compare against max to catch all violations.
         let mut max_i = 0;
         for i in 1..imports.len() {
-            if import_path_cmp(&imports[i], &imports[max_i]) == std::cmp::Ordering::Less {
+            if self.import_path_cmp(&imports[i], &imports[max_i]) == std::cmp::Ordering::Less {
                 // Find the closest earlier import this one should appear before
                 // (smallest key still greater than current)
                 let target = imports[..i]
                     .iter()
-                    .filter(|x| import_path_cmp(&imports[i], x) == std::cmp::Ordering::Less)
-                    .min_by(|a, b| import_path_cmp(a, b))
+                    .filter(|x| self.import_path_cmp(&imports[i], x) == std::cmp::Ordering::Less)
+                    .min_by(|a, b| self.import_path_cmp(a, b))
                     .unwrap();
                 self.add_strict_violation(ParseError::new(
                     self.node_span(imports[i].node_id),
                     format!(
                         "Import '{}' should appear before '{}'",
-                        import_path_display(&imports[i]),
-                        import_path_display(target),
+                        self.import_path_display(&imports[i]),
+                        self.import_path_display(target),
                     ),
                 ));
             } else {
@@ -697,22 +784,21 @@ impl ParseContext {
             if matches!(constructs[i].kind, ConstructKind::Invalid(_)) {
                 continue;
             }
-            let key = construct_sort_key(&constructs[i]);
             if let Some(mi) = max_ci
-                && key < construct_sort_key(&constructs[mi])
+                && self.construct_cmp(&constructs[i], &constructs[mi]) == std::cmp::Ordering::Less
             {
                 let target = constructs[..i]
                     .iter()
                     .filter(|x| !matches!(x.kind, ConstructKind::Invalid(_)))
-                    .filter(|x| key < construct_sort_key(x))
-                    .min_by(|a, b| construct_sort_key(a).cmp(&construct_sort_key(b)))
+                    .filter(|x| self.construct_cmp(&constructs[i], x) == std::cmp::Ordering::Less)
+                    .min_by(|a, b| self.construct_cmp(a, b))
                     .unwrap();
                 self.add_strict_violation(ParseError::new(
                     self.node_span(constructs[i].node_id),
                     format!(
                         "'{}' should appear before '{}'",
-                        construct_label(&constructs[i]),
-                        construct_label(target),
+                        self.construct_label(&constructs[i]),
+                        self.construct_label(target),
                     ),
                 ));
             } else {
@@ -731,22 +817,21 @@ impl ParseContext {
             if matches!(fields[i].kind, FieldKind::Invalid(_)) {
                 continue;
             }
-            let key = field_sort_key(&fields[i]);
             if let Some(mi) = max_fi
-                && key < field_sort_key(&fields[mi])
+                && self.field_cmp(&fields[i], &fields[mi]) == std::cmp::Ordering::Less
             {
                 let target = fields[..i]
                     .iter()
                     .filter(|x| !matches!(x.kind, FieldKind::Invalid(_)))
-                    .filter(|x| key < field_sort_key(x))
-                    .min_by(|a, b| field_sort_key(a).cmp(&field_sort_key(b)))
+                    .filter(|x| self.field_cmp(&fields[i], x) == std::cmp::Ordering::Less)
+                    .min_by(|a, b| self.field_cmp(a, b))
                     .unwrap();
                 self.add_strict_violation(ParseError::new(
                     self.node_span(fields[i].node_id),
                     format!(
                         "'{}' should appear before '{}'",
-                        field_label(&fields[i]),
-                        field_label(target),
+                        self.field_label(&fields[i]),
+                        self.field_label(target),
                     ),
                 ));
             } else {
@@ -769,8 +854,30 @@ impl ParseContext {
             self.parse_trivia();
             match source::try_parse_import(&mut self) {
                 Ok(Some(import)) => {
+                    // Check for duplicate alias among prior imports.
+                    let alias_ident = import.alias.as_ref().or(import.path.last());
+                    if let Some(alias_ident) = alias_ident {
+                        let alias_sym = alias_ident.name.clone();
+                        let dup = imports.iter().any(|prev: &Import| {
+                            prev.alias
+                                .as_ref()
+                                .or(prev.path.last())
+                                .map(|i| i.name.clone())
+                                == Some(alias_sym.clone())
+                        });
+                        if dup {
+                            self.add_parse_error(ParseError::new(
+                                self.source_map
+                                    .node_ranges
+                                    .get(&import.node_id)
+                                    .copied()
+                                    .unwrap_or((start_pos, self.pos())),
+                                format!("Duplicate import alias '{}'", self.ident_str(alias_ident)),
+                            ));
+                        }
+                    }
                     imports.push(import);
-                    // Capture blank-line flag now — the import parser's internal
+                    // Capture blank-line flag now - the import parser's internal
                     // parse_trivia (for "as" check) may have consumed it.
                     had_blank_after_last_import = self.trivia_had_blank_line;
                 }
@@ -786,6 +893,7 @@ impl ParseContext {
 
         // Parse constructs
         let mut constructs = Vec::new();
+        let mut seen_construct_names: HashSet<Symbol> = HashSet::new();
         let mut first_construct = true;
         loop {
             self.parse_trivia();
@@ -823,17 +931,29 @@ impl ParseContext {
                         source_anns = Some(std::mem::take(&mut ann_groups));
                     }
                 }
-                // Remaining groups go to first construct
-                Some(
-                    std::mem::take(&mut ann_groups)
-                        .into_iter()
-                        .flatten()
-                        .collect(),
-                )
+                // Remaining groups go to first construct.
+                // If nothing remains, pass None so parse_construct parses
+                // its own annotations (e.g. @test after imports).
+                let collected: Vec<Annotation> = std::mem::take(&mut ann_groups)
+                    .into_iter()
+                    .flatten()
+                    .collect();
+                if collected.is_empty() {
+                    None
+                } else {
+                    Some(collected)
+                }
             } else {
                 None
             };
-            constructs.push(construct::parse_construct(&mut self, already_parsed));
+            let construct = construct::parse_construct(&mut self, already_parsed);
+            if !seen_construct_names.insert(construct.name.name.clone()) {
+                self.add_parse_error(ParseError::new(
+                    self.node_span(construct.name.node_id),
+                    format!("Duplicate construct name '{}'", construct.name.name),
+                ));
+            }
+            constructs.push(construct);
             first_construct = false;
         }
 
@@ -893,106 +1013,125 @@ impl ParseContext {
     }
 }
 
-/// Compare two imports by module path (ASCII, segment-by-segment).
-fn import_path_cmp(a: &Import, b: &Import) -> std::cmp::Ordering {
-    a.path
-        .iter()
-        .zip(b.path.iter())
-        .find_map(|(x, y)| {
-            let cmp = x.name.cmp(&y.name);
-            if cmp != std::cmp::Ordering::Equal {
-                Some(cmp)
-            } else {
-                None
+impl ParseContext {
+    /// Compare two imports by module path (ASCII, segment-by-segment).
+    /// Compare identifiers with underscore sorting after all other characters.
+    fn name_cmp(a: &str, b: &str) -> std::cmp::Ordering {
+        for (x, y) in a.bytes().zip(b.bytes()) {
+            let x = if x == b'_' { 0x7F } else { x };
+            let y = if y == b'_' { 0x7F } else { y };
+            match x.cmp(&y) {
+                std::cmp::Ordering::Equal => continue,
+                ord => return ord,
             }
-        })
-        .unwrap_or_else(|| a.path.len().cmp(&b.path.len()))
-}
-
-fn import_path_display(imp: &Import) -> String {
-    imp.path
-        .iter()
-        .map(|i| i.name.as_str())
-        .collect::<Vec<_>>()
-        .join(".")
-}
-
-fn construct_sort_key(c: &Construct) -> (u8, u8, &str) {
-    let kind_rank = match &c.kind {
-        ConstructKind::TypeAlias(_) => 0,
-        ConstructKind::Data(_) => 1,
-        ConstructKind::Entity(_) => 2,
-        ConstructKind::Func(_) => 3,
-        ConstructKind::Extern(_) => 4,
-        ConstructKind::Native(_) => 5,
-        ConstructKind::Invalid(_) => 255,
-    };
-    let out_rank = if c.out { 0 } else { 1 };
-    (kind_rank, out_rank, &c.name.name)
-}
-
-fn construct_label(c: &Construct) -> String {
-    let keyword = match &c.kind {
-        ConstructKind::TypeAlias(_) => "type",
-        ConstructKind::Data(_) => "data",
-        ConstructKind::Entity(_) => "entity",
-        ConstructKind::Func(_) => "func",
-        ConstructKind::Extern(_) => "extern",
-        ConstructKind::Native(_) => "native",
-        ConstructKind::Invalid(_) => "?",
-    };
-    if c.out {
-        format!("out {} {}", keyword, c.name.name)
-    } else {
-        format!("{} {}", keyword, c.name.name)
-    }
-}
-
-/// Returns (group_rank, name) for field ordering. Caller must filter out invalid fields.
-fn field_sort_key(f: &Field) -> (u8, &str) {
-    match &f.kind {
-        FieldKind::Intype(ft) => (0, &ft.name.name),
-        FieldKind::Var(fv) => {
-            let rank = match fv.modifier {
-                FieldVarModifier::In => {
-                    if fv.default.is_some() {
-                        2
-                    } else {
-                        1
-                    }
-                }
-                FieldVarModifier::Inout => {
-                    if fv.default.is_some() {
-                        4
-                    } else {
-                        3
-                    }
-                }
-                FieldVarModifier::Out => 5,
-                FieldVarModifier::OutEarly => 6,
-                FieldVarModifier::Implicit => 7,
-                FieldVarModifier::Value => 8,
-            };
-            (rank, &fv.name.name)
         }
-        FieldKind::Invalid(_) => unreachable!(),
+        a.len().cmp(&b.len())
     }
-}
 
-fn field_label(f: &Field) -> String {
-    match &f.kind {
-        FieldKind::Intype(ft) => format!("intype {}", ft.name.name),
-        FieldKind::Var(fv) => {
-            let modifier = match fv.modifier {
-                FieldVarModifier::In => "in",
-                FieldVarModifier::Inout => "inout",
-                FieldVarModifier::Out => "out",
-                FieldVarModifier::OutEarly => "out!",
-                FieldVarModifier::Implicit => "implicit",
-                FieldVarModifier::Value => "value",
-            };
-            format!("{} {}", modifier, fv.name.name)
+    fn import_path_cmp(&self, a: &Import, b: &Import) -> std::cmp::Ordering {
+        a.path
+            .iter()
+            .zip(b.path.iter())
+            .find_map(|(x, y)| {
+                let cmp = Self::name_cmp(self.ident_str(x), self.ident_str(y));
+                if cmp != std::cmp::Ordering::Equal {
+                    Some(cmp)
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_else(|| a.path.len().cmp(&b.path.len()))
+    }
+
+    fn import_path_display(&self, imp: &Import) -> String {
+        imp.path
+            .iter()
+            .map(|i| self.ident_str(i))
+            .collect::<Vec<_>>()
+            .join(".")
+    }
+
+    fn construct_cmp(&self, a: &Construct, b: &Construct) -> std::cmp::Ordering {
+        let kind_rank = |c: &Construct| -> u8 {
+            match &c.kind {
+                ConstructKind::TypeAlias(_) => 0,
+                ConstructKind::Data(_) => 1,
+                ConstructKind::Entity(_) => 2,
+                ConstructKind::Func(_) => 3,
+                ConstructKind::Extern(_) => 4,
+                ConstructKind::Native(_) => 5,
+                ConstructKind::Invalid(_) => 255,
+            }
+        };
+        let out_rank = |c: &Construct| -> u8 { if c.out { 0 } else { 1 } };
+        kind_rank(a)
+            .cmp(&kind_rank(b))
+            .then(out_rank(a).cmp(&out_rank(b)))
+            .then(Self::name_cmp(
+                self.ident_str(&a.name),
+                self.ident_str(&b.name),
+            ))
+    }
+
+    fn construct_label(&self, c: &Construct) -> String {
+        let keyword = match &c.kind {
+            ConstructKind::TypeAlias(_) => "type",
+            ConstructKind::Data(_) => "data",
+            ConstructKind::Entity(_) => "entity",
+            ConstructKind::Func(_) => "func",
+            ConstructKind::Extern(_) => "extern",
+            ConstructKind::Native(_) => "native",
+            ConstructKind::Invalid(_) => "?",
+        };
+        if c.out {
+            format!("out {} {}", keyword, self.ident_str(&c.name))
+        } else {
+            format!("{} {}", keyword, self.ident_str(&c.name))
         }
-        FieldKind::Invalid(_) => "?".to_string(),
+    }
+
+    fn field_cmp(&self, a: &Field, b: &Field) -> std::cmp::Ordering {
+        let rank = |f: &Field| -> u8 {
+            match &f.kind {
+                FieldKind::Intype(_) => 0,
+                FieldKind::Var(fv) => match fv.modifier {
+                    FieldVarModifier::In if fv.default.is_none() => 1,
+                    FieldVarModifier::In => 2,
+                    FieldVarModifier::Inout if fv.default.is_none() => 3,
+                    FieldVarModifier::Inout => 4,
+                    FieldVarModifier::Out => 5,
+                    FieldVarModifier::OutEarly => 6,
+                    FieldVarModifier::Implicit => 7,
+                    FieldVarModifier::Value => 8,
+                },
+                FieldKind::Invalid(_) => 255,
+            }
+        };
+        let name = |f: &Field| -> &str {
+            match &f.kind {
+                FieldKind::Intype(ft) => self.ident_str(&ft.name),
+                FieldKind::Var(fv) => self.ident_str(&fv.name),
+                FieldKind::Invalid(_) => "",
+            }
+        };
+        rank(a).cmp(&rank(b)).then(Self::name_cmp(name(a), name(b)))
+    }
+
+    fn field_label(&self, f: &Field) -> String {
+        match &f.kind {
+            FieldKind::Intype(ft) => format!("intype {}", self.ident_str(&ft.name)),
+            FieldKind::Var(fv) => {
+                let modifier = match fv.modifier {
+                    FieldVarModifier::In => "in",
+                    FieldVarModifier::Inout => "inout",
+                    FieldVarModifier::Out => "out",
+                    FieldVarModifier::OutEarly => "out!",
+                    FieldVarModifier::Implicit => "implicit",
+                    FieldVarModifier::Value => "value",
+                };
+                format!("{} {}", modifier, self.ident_str(&fv.name))
+            }
+            FieldKind::Invalid(_) => "?".to_string(),
+        }
     }
 }

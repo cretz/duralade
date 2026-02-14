@@ -1,0 +1,35 @@
+# Array literal type inference and method return types
+
+func array_get_returns_nilable {
+    arr := [10, 20]
+    v := arr.get(index = 0).result
+         ^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int?
+}
+
+func array_len_returns_int {
+    arr := [1]
+    n := arr.len().result
+         ^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+func array_literal_int {
+    arr := [1, 2, 3]
+           ^^^^^^^^^ @@TYPE: duralade.array::array[t = duralade.int::int]
+}
+
+func array_literal_str {
+    arr := ["a", "b"]
+           ^^^^^^^^^^ @@TYPE: duralade.array::array[t = duralade.str::str]
+}
+
+func array_remove_returns_nilable {
+    arr := [10, 20]
+    v := arr.remove(index = 0).result
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int?
+}
+
+func array_set_returns_element {
+    arr := [10, 20]
+    v := arr.set(index = 0, value = 99).old_value
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}

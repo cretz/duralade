@@ -1,0 +1,122 @@
+# Type inference for narrowing expressions
+
+func as_narrowing_else_result_type {
+    in x: int?
+
+    a := x as int else! -1
+         ^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+func as_narrowing_result_type {
+    in x: int?
+
+    a := x as! int
+         ^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+func as_narrowing_str {
+    in x: str?
+
+    a := x as! str
+         ^^^^^^^^^ @@TYPE: duralade.str::str
+}
+
+func as_narrowing_var_type {
+    in x: int?
+
+    y := x as! int
+    a := y
+         ^ @@TYPE: duralade.int::int
+}
+
+func if_narrowing_as_binding_type {
+    in x: int?
+
+    if val := x as int {
+        a := val
+             ^^^ @@TYPE: duralade.int::int
+    }
+}
+
+func if_narrowing_as_multi_binding_types {
+    in x: int?
+    in y: str?
+
+    if a, b := x as int, y as str {
+        c := a
+             ^ @@TYPE: duralade.int::int
+        d := b
+             ^ @@TYPE: duralade.str::str
+    }
+}
+
+func if_narrowing_as_str_binding_type {
+    in x: str?
+
+    if val := x as str {
+        a := val
+             ^^^ @@TYPE: duralade.str::str
+    }
+}
+
+func if_narrowing_nil_binding_type {
+    in x: int?
+
+    if val := x? {
+        a := val
+             ^^^ @@TYPE: duralade.int::int
+    }
+}
+
+func if_narrowing_nil_multi_binding_types {
+    in x: int?
+    in y: str?
+
+    if a, b := x?, y? {
+        c := a
+             ^ @@TYPE: duralade.int::int
+        d := b
+             ^ @@TYPE: duralade.str::str
+    }
+}
+
+func if_narrowing_nil_shadowing_type {
+    in x: int?
+
+    if x := x? {
+        a := x
+             ^ @@TYPE: duralade.int::int
+    } else {
+        a := x
+             ^ @@TYPE: duralade.int::int?
+    }
+}
+
+func nil_narrowing_else_strips_nilable {
+    in x: int?
+
+    a := x? else! -1
+         ^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+func nil_narrowing_on_non_nilable {
+    in x: int
+
+    a := x?!
+         ^^^ @@TYPE: duralade.int::int
+}
+
+func nil_narrowing_strips_nilable {
+    in x: int?
+
+    a := x?!
+         ^^^ @@TYPE: duralade.int::int
+}
+
+func nil_narrowing_var_type {
+    in x: int?
+
+    y := x?!
+    a := y
+         ^ @@TYPE: duralade.int::int
+}

@@ -1,0 +1,20 @@
+import duralade.error
+import duralade.str
+
+out data test {}
+
+out entity context {
+    out func on_extern {
+        in extern: str
+        in handler: func {}
+        out! :error?
+
+        on_extern_native(extern, handler)!
+    }
+}
+
+noblock native on_extern_native {
+    in extern: str
+    in handler: func {}
+    out! :error?
+}

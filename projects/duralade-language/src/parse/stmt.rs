@@ -4,20 +4,45 @@ use super::basic::try_parse_ident;
 use super::construct::starts_with_keyword;
 use super::expr::parse_expr;
 use super::types::parse_type;
-use super::{IndentOpener, ParseContext, ParseError};
+use super::{ParseContext, ParseError};
 
 /// Parse an optional `:label` suffix (used by `for`, `break`, `continue`).
 /// Must appear immediately after the keyword with no space before `:`.
 fn parse_label(ctx: &mut ParseContext) -> Option<Ident> {
+    let before = ctx.pos();
+
+    // Detect space before colon: `break :label` → strict violation, still parse it
+    let spaces = ctx.skip_spaces();
     if !ctx.remaining().starts_with(':') {
+        ctx.set_pos(before);
         return None;
     }
+    if spaces > 0 {
+        ctx.add_strict_violation(ParseError::new(
+            (before, ctx.pos() + 1),
+            "No space allowed before ':' in label".to_string(),
+        ));
+    }
+
+    let colon_pos = ctx.pos();
     ctx.advance(1); // ":"
+
+    // Detect space after colon: `break: label` → strict violation (only if label follows)
+    let spaces_after = ctx.skip_spaces();
+
     match try_parse_ident(ctx) {
-        Ok(Some(ident)) => Some(ident),
+        Ok(Some(ident)) => {
+            if spaces_after > 0 {
+                ctx.add_strict_violation(ParseError::new(
+                    (colon_pos, colon_pos + 1 + spaces_after),
+                    "No space allowed after ':' in label".to_string(),
+                ));
+            }
+            Some(ident)
+        }
         Ok(None) => {
             ctx.add_parse_error(ParseError::new(
-                (ctx.pos() - 1, ctx.pos()),
+                (colon_pos, colon_pos + 1),
                 "Expected label name after ':'".to_string(),
             ));
             None
@@ -44,6 +69,12 @@ pub(crate) fn parse_stmt(ctx: &mut ParseContext) -> Option<Stmt> {
     if remaining.starts_with("return!")
         && !remaining[7..].starts_with(|c: char| c.is_alphanumeric() || c == '_')
     {
+        if ctx.defer_depth > 0 {
+            ctx.add_parse_error(ParseError::new(
+                (start, start + 7),
+                "Early return 'return!' is not allowed inside defer blocks".to_string(),
+            ));
+        }
         ctx.advance(7); // "return!"
         ctx.skip_spaces();
         let expr = match parse_expr(ctx) {
@@ -125,7 +156,7 @@ pub(crate) fn parse_stmt(ctx: &mut ParseContext) -> Option<Stmt> {
         return Some(Stmt::Block(block));
     }
 
-    // Try expression — then check for `:=` or assignment operators after it
+    // Try expression - then check for `:=` or assignment operators after it
     let expr = parse_expr(ctx)?;
 
     // Collect comma-separated LHS for potential multi-var (:= or assignment)
@@ -290,7 +321,7 @@ pub(crate) fn parse_stmt(ctx: &mut ParseContext) -> Option<Stmt> {
         }));
     }
 
-    // No operator — if multi-expr, that's invalid
+    // No operator - if multi-expr, that's invalid
     if lhs_exprs.len() > 1 {
         ctx.add_parse_error(ParseError::new(
             (start, ctx.pos()),
@@ -339,7 +370,7 @@ pub(crate) fn parse_stmt_block(ctx: &mut ParseContext) -> StmtBlock {
         };
     }
 
-    ctx.indent(IndentOpener::Brace);
+    ctx.indent(b'{');
     let mut stmts = Vec::new();
     loop {
         // Peek for `}` at outer indent level before parse_trivia to avoid
@@ -348,6 +379,7 @@ pub(crate) fn parse_stmt_block(ctx: &mut ParseContext) -> StmtBlock {
         if peek.is_empty() || peek.starts_with('}') {
             break;
         }
+        let pos_before = ctx.pos();
         ctx.parse_trivia();
         if ctx.remaining().starts_with('}') || ctx.remaining().is_empty() {
             break;
@@ -361,6 +393,9 @@ pub(crate) fn parse_stmt_block(ctx: &mut ParseContext) -> StmtBlock {
                 "Unrecognized content in block".to_string(),
             ));
             ctx.skip_past_end_of_line();
+            if ctx.pos() == pos_before {
+                break;
+            }
         }
     }
     // Consume trivia, then dedent so closer gets correct indent check
@@ -397,7 +432,7 @@ fn parse_if_condition(ctx: &mut ParseContext) -> Option<StmtIfCondition> {
     let cond_start = ctx.pos();
 
     // Speculatively try narrowing: `names := exprs`
-    // The one snapshot here is unavoidable — if it's not narrowing we must
+    // The one snapshot here is unavoidable - if it's not narrowing we must
     // re-parse as a bool condition.
     let snap = ctx.snapshot();
     let mut names: Vec<Ident> = Vec::new();
@@ -423,7 +458,7 @@ fn parse_if_condition(ctx: &mut ParseContext) -> Option<StmtIfCondition> {
             ctx.advance(2); // ":="
             ctx.skip_spaces();
 
-            // Committed to narrowing — suppress bare `as`/`?` in expr parser
+            // Committed to narrowing - suppress bare `as`/`?` in expr parser
             ctx.suppress_narrowing_postfix = true;
             if let Some(first_expr) = parse_expr(ctx) {
                 ctx.skip_spaces();
@@ -441,7 +476,7 @@ fn parse_if_condition(ctx: &mut ParseContext) -> Option<StmtIfCondition> {
                     return Some(cond);
                 }
             }
-            // Had `names :=` but no `as`/`?` — not a narrowing form.
+            // Had `names :=` but no `as`/`?` - not a narrowing form.
         }
     }
     ctx.suppress_narrowing_postfix = false;
@@ -471,7 +506,7 @@ fn parse_if_condition(ctx: &mut ParseContext) -> Option<StmtIfCondition> {
         ctx.restore(init_snap);
     }
 
-    // `{` here is the block, not a map literal — condition is missing
+    // `{` here is the block, not a map literal - condition is missing
     if ctx.remaining().starts_with('{') {
         return None;
     }
@@ -778,7 +813,7 @@ fn parse_for(ctx: &mut ParseContext) -> Stmt {
                 ));
                 Ident {
                     node_id: expr.node_id(),
-                    name: String::new(),
+                    name: Symbol::empty(),
                     is_raw: false,
                 }
             }
@@ -787,30 +822,12 @@ fn parse_for(ctx: &mut ParseContext) -> Stmt {
         let Some(iter_expr) = parse_expr(ctx) else {
             ctx.add_parse_error(ParseError::new(
                 (start, ctx.pos()),
-                "Expected invocation after 'in'".to_string(),
+                "Expected expression after 'in'".to_string(),
             ));
             ctx.skip_past_end_of_line();
             return Stmt::Invalid(InvalidNode {
                 node_id: ctx.alloc_node_id(start, ctx.pos()),
             });
-        };
-
-        // For-in requires an invocation expression
-        let iter_span = ctx.node_span(iter_expr.node_id());
-        let invocation = match iter_expr {
-            Expr::Invocation(inv) => inv,
-            _ => {
-                ctx.add_parse_error(ParseError::new(
-                    iter_span,
-                    "For-in expression must be an invocation".to_string(),
-                ));
-                // Continue parsing block for error recovery
-                ctx.skip_spaces();
-                let _block = parse_stmt_block(ctx);
-                return Stmt::Invalid(InvalidNode {
-                    node_id: ctx.alloc_node_id(start, ctx.pos()),
-                });
-            }
         };
 
         ctx.skip_spaces();
@@ -821,7 +838,7 @@ fn parse_for(ctx: &mut ParseContext) -> Stmt {
             clause: Some(StmtForClause::In(StmtForIn {
                 node_id: ctx.alloc_node_id(expr_start, ctx.pos()),
                 var: name,
-                invocation,
+                expr: iter_expr,
             })),
             block,
         });
@@ -853,7 +870,9 @@ fn parse_defer(ctx: &mut ParseContext) -> Stmt {
         ));
     }
 
+    ctx.defer_depth += 1;
     let block = parse_stmt_block(ctx);
+    ctx.defer_depth -= 1;
     Stmt::Defer(StmtDefer {
         node_id: ctx.alloc_node_id(start, ctx.pos()),
         block,
@@ -936,29 +955,48 @@ fn parse_var(ctx: &mut ParseContext) -> Stmt {
     ctx.advance(3); // "var"
     ctx.skip_spaces();
 
-    // Parse first declaration (name [: type])
+    // Parse first declaration: either shorthand `:type` or `name [: type]`
     let decl_start = ctx.pos();
-    let name = match try_parse_ident(ctx) {
-        Ok(Some(ident)) => ident,
-        Ok(None) => {
+    let (name, ty) = if ctx.remaining().starts_with(':') {
+        // Shorthand: `var :type` - derive name from type
+        ctx.advance(1); // ':'
+        let parsed_ty = parse_type(ctx);
+        let derived = super::construct::derive_field_name(&parsed_ty).unwrap_or_else(|| {
             ctx.add_parse_error(ParseError::new(
-                (start, ctx.pos()),
-                "Expected identifier after 'var'".to_string(),
+                (decl_start, ctx.pos()),
+                "Could not derive variable name from type".to_string(),
             ));
-            ctx.skip_past_end_of_line();
-            return Stmt::Invalid(InvalidNode {
-                node_id: ctx.alloc_node_id(start, ctx.pos()),
-            });
-        }
-        Err(err) => {
-            ctx.add_parse_error(err);
-            ctx.skip_past_end_of_line();
-            return Stmt::Invalid(InvalidNode {
-                node_id: ctx.alloc_node_id(start, ctx.pos()),
-            });
-        }
+            Ident {
+                node_id: ctx.alloc_node_id(decl_start, ctx.pos()),
+                name: Symbol::unknown(),
+                is_raw: false,
+            }
+        });
+        (derived, Some(parsed_ty))
+    } else {
+        let name = match try_parse_ident(ctx) {
+            Ok(Some(ident)) => ident,
+            Ok(None) => {
+                ctx.add_parse_error(ParseError::new(
+                    (start, ctx.pos()),
+                    "Expected identifier after 'var'".to_string(),
+                ));
+                ctx.skip_past_end_of_line();
+                return Stmt::Invalid(InvalidNode {
+                    node_id: ctx.alloc_node_id(start, ctx.pos()),
+                });
+            }
+            Err(err) => {
+                ctx.add_parse_error(err);
+                ctx.skip_past_end_of_line();
+                return Stmt::Invalid(InvalidNode {
+                    node_id: ctx.alloc_node_id(start, ctx.pos()),
+                });
+            }
+        };
+        let ty = parse_var_optional_type(ctx);
+        (name, ty)
     };
-    let ty = parse_var_optional_type(ctx);
     let mut vars = vec![StmtVarDecl {
         node_id: ctx.alloc_node_id(decl_start, ctx.pos()),
         name,
@@ -1101,7 +1139,7 @@ fn parse_patch_version(ctx: &mut ParseContext) -> Vec<Ident> {
         ctx.advance(8); // "@default"
         vec![Ident {
             node_id: ctx.alloc_node_id(start, ctx.pos()),
-            name: "@default".to_string(),
+            name: Symbol::default_patch(),
             is_raw: false,
         }]
     } else {
@@ -1125,7 +1163,7 @@ fn parse_patch_body(ctx: &mut ParseContext) -> Vec<Stmt> {
         if peek.is_empty() || peek.starts_with('}') {
             break;
         }
-        // Check for `% }}` — branch end/continuation (not a nested patch)
+        // Check for `% }}` - branch end/continuation (not a nested patch)
         if let Some(stripped) = peek.strip_prefix('%') {
             let after_pct = stripped.trim_start_matches(' ');
             if after_pct.starts_with("}}") {
@@ -1133,6 +1171,7 @@ fn parse_patch_body(ctx: &mut ParseContext) -> Vec<Stmt> {
             }
         }
 
+        let pos_before = ctx.pos();
         ctx.parse_trivia();
         if ctx.remaining().is_empty() {
             break;
@@ -1147,6 +1186,9 @@ fn parse_patch_body(ctx: &mut ParseContext) -> Vec<Stmt> {
                 "Unrecognized content in patch branch".to_string(),
             ));
             ctx.skip_past_end_of_line();
+            if ctx.pos() == pos_before {
+                break;
+            }
         }
     }
     stmts

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::NodeId;
+use super::{NodeId, Symbol};
 
 /// Spec 4 - comment (consecutive comment lines grouped together)
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,6 +20,6 @@ pub struct CommentLine {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Ident {
     pub node_id: NodeId,
-    pub name: String,
+    pub name: Symbol,
     pub is_raw: bool,
 }

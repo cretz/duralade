@@ -1,0 +1,24 @@
+# Variable declaration and assignment type errors
+
+func assign_bool_to_int {
+    x := 10
+    x = true
+        ^^^^ @@ERROR: cannot assign bool to variable of type int
+}
+
+func assign_int_to_str {
+    x := "hello"
+    x = 42
+        ^^ @@ERROR: cannot assign int to variable of type str
+}
+
+func assign_wrong_type {
+    x := 10
+    x = "bar"
+        ^^^^^ @@ERROR: cannot assign str to variable of type int
+}
+
+func var_explicit_type_mismatch {
+    var x: int = "bar"
+                 ^^^^^ @@ERROR: cannot assign str to variable of type int
+}

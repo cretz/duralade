@@ -1,0 +1,124 @@
+import duralade.assert
+import duralade.test
+
+data pair {
+    a: int
+    b: int
+}
+
+# Field default `in foo = foo` resolves from outer scope (entity state),
+# not self-reference. When caller provides foo, that value wins.
+entity default_from_outer {
+    in foo: str
+
+    out func get_bar {
+        in foo = foo
+        out bar = foo
+    }
+}
+
+# Anon func in field default captures an outer field - SHOULD create a dependency.
+# Topo sort must evaluate x before z (the func), and z before result.
+func anon_func_captures_field {
+    out r = z().r
+    out x = 7
+    out z = func { out r = x }
+    out! :error?
+
+    assert::equal(actual = r, expected = 7)!
+}
+
+# Anon func param shadows an outer field name - should NOT create a dependency
+# on that field. The anon func's own `in x` default (0) is used, not outer x.
+func anon_func_shadows_field {
+    out r = z().r
+    out x = 42
+    out z = func {
+        in x = 0
+        out r = x
+    }
+}
+
+# Three-field dependency chain: c depends on b, b depends on a.
+func chain_dependency {
+    out a = 1
+    out b = a + 1
+    out c = b + 1
+}
+
+@test
+func dep_order_anon_func_captures_field {
+    out! :error?
+
+    r := anon_func_captures_field()!
+    # The anon func body references outer field x (not shadowed),
+    # so topo sort evaluates x=7 before z, then z before result.
+    assert::equal(actual = r.r, expected = 7)!
+}
+
+@test
+func dep_order_anon_func_shadows_field {
+    out! :error?
+
+    r := anon_func_shadows_field()
+    # The anon func's `in x` param shadows the outer field `x = 42`,
+    # so no dependency on x; the default (0) is used.
+    assert::equal(actual = r.r, expected = 0)!
+}
+
+@test
+func dep_order_chain {
+    out! :error?
+
+    r := chain_dependency()
+    assert::equal(actual = r.a, expected = 1)!
+    assert::equal(actual = r.b, expected = 2)!
+    assert::equal(actual = r.c, expected = 3)!
+}
+
+@test
+func dep_order_default_from_outer {
+    out! :error?
+
+    e := default_from_outer(foo = "entity_val")
+
+    # No arg: default `in foo = foo` resolves from entity state
+    r1 := e.get_bar()
+    assert::equal(actual = r1.bar, expected = "entity_val")!
+
+    # With arg: caller-provided value wins
+    r2 := e.get_bar(foo = "caller_val")
+    assert::equal(actual = r2.bar, expected = "caller_val")!
+}
+
+@test
+func dep_order_out_before_implicit {
+    out! :error?
+
+    r := out_before_implicit()
+    assert::equal(actual = r.result, expected = 99)!
+}
+
+@test
+func dep_order_out_references_later_out {
+    out! :error?
+
+    r := out_references_later_out()
+    assert::equal(actual = r.sum, expected = 30)!
+    assert::equal(actual = r.x, expected = 10)!
+    assert::equal(actual = r.y, expected = 20)!
+}
+
+# out field default references implicit field defined later in source order.
+# Topo sort ensures implicit is evaluated before out.
+func out_before_implicit {
+    out result = config.a
+    implicit config = pair(a = 99, b = 0)
+}
+
+# out field default references another out field defined later in source.
+func out_references_later_out {
+    out sum = x + y
+    out x = 10
+    out y = 20
+}

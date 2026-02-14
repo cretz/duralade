@@ -25,8 +25,18 @@ out extern bad_out {
 extern missing_brace_extern
                           ^ @@ERROR: Expected '{' in extern
 
+extern out_default_not_allowed {
+    out value: int = 1
+                     ^ @@ERROR: 'out' field in extern cannot have default expression
+}
+
 view native missing_brace_native
                                ^ @@ERROR: Expected '{' in native
+
+noblock native native_out_default_not_allowed {
+    out value: int = 1
+                     ^ @@ERROR: 'out' field in native cannot have default expression
+}
 
 native needs_modifier {
 ^^^^^^ @@ERROR: must have 'view' or 'noblock' modifier

@@ -8,10 +8,10 @@ import a.bar
 
 # Second segment tiebreak
 import c.baz
-import c.bar
-^^^^^^^^^^^^ @@STRICT: Import 'c.bar' should appear before 'c.baz'
+import c.bat
+^^^^^^^^^^^^ @@STRICT: Import 'c.bat' should appear before 'c.baz'
 
 # Shorter prefix sorts before longer (foo.bar < fooaaa.baz)
-import d.fooaaa.baz
-import d.foo.bar
-^^^^^^^^^^^^^^^^ @@STRICT: Import 'd.foo.bar' should appear before 'd.fooaaa.baz'
+import d.fooaaa.qux
+import d.foo.quux
+^^^^^^^^^^^^^^^^^ @@STRICT: Import 'd.foo.quux' should appear before 'd.fooaaa.qux'

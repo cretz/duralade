@@ -1,0 +1,19 @@
+# Array method type errors with generic substitution
+
+func get_result_wrong_type {
+    arr := [1, 2, 3]
+    var s: str = arr.get(index = 0).result
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: cannot assign int? to variable of type str
+}
+
+func set_wrong_index_type {
+    arr := [1, 2]
+    arr.set(index = "zero", value = 5)
+                    ^^^^^^ @@ERROR: argument 'index' type mismatch: expected int, got str
+}
+
+func set_wrong_value_type {
+    arr := [1, 2, 3]
+    arr.set(index = 0, value = "hello")
+                               ^^^^^^^ @@ERROR: argument 'value' type mismatch: expected int, got str
+}

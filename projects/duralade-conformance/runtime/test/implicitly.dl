@@ -1,0 +1,129 @@
+import duralade.assert
+import duralade.test
+
+data config {
+    name: str
+}
+
+data settings {
+    value: int
+}
+
+@test
+func basic_implicit_passing {
+    out! :error?
+
+    implicitly config(name = "hello")
+    r := use_config()
+    assert::equal(actual = r.name, expected = "hello")!
+}
+
+func implicit_block_error_helper {
+    out! :error?
+
+    implicitly config(name = "test") {
+        assert::equal(actual = 1, expected = 2)!
+    }
+}
+
+@test
+func implicit_block_error_propagates {
+    out! :error?
+
+    r := implicit_block_error_helper()
+    assert::equal(actual = r.error != nil, expected = true)!
+}
+
+@test
+func implicit_block_scope {
+    out! :error?
+
+    implicitly config(name = "outer")
+
+    implicitly config(name = "block") {
+        r := use_config()
+        assert::equal(actual = r.name, expected = "block")!
+    }
+
+    r := use_config()
+    assert::equal(actual = r.name, expected = "outer")!
+}
+
+@test
+func implicit_default_overridden {
+    out! :error?
+
+    implicitly config(name = "override")
+    r := use_config_with_default()
+    assert::equal(actual = r.name, expected = "override")!
+}
+
+@test
+func implicit_default_used {
+    out! :error?
+
+    r := use_config_with_default()
+    assert::equal(actual = r.name, expected = "default")!
+}
+
+@test
+func implicit_multiple_types {
+    out! :error?
+
+    implicitly config(name = "cfg"), settings(value = 42)
+    r := use_two_implicits()
+    assert::equal(actual = r.name, expected = "cfg")!
+    assert::equal(actual = r.value, expected = 42)!
+}
+
+@test
+func implicit_nilable_missing {
+    out! :error?
+
+    r := use_optional_config()
+    assert::equal(actual = r.config, expected = nil)!
+}
+
+@test
+func implicit_nilable_provided {
+    out! :error?
+
+    implicitly config(name = "present")
+    r := use_optional_config()
+    assert::equal(actual = r.config.name, expected = "present")!
+}
+
+@test
+func implicit_shadowing {
+    out! :error?
+
+    implicitly config(name = "outer")
+    r1 := use_config()
+    assert::equal(actual = r1.name, expected = "outer")!
+
+    implicitly config(name = "inner")
+    r2 := use_config()
+    assert::equal(actual = r2.name, expected = "inner")!
+}
+
+func use_config {
+    out name = config.name
+    implicit :config
+}
+
+func use_config_with_default {
+    out name = config.name
+    implicit config = config(name = "default")
+}
+
+func use_optional_config {
+    out config = c
+    implicit c: config?
+}
+
+func use_two_implicits {
+    out name = config.name
+    out value = settings.value
+    implicit :config
+    implicit :settings
+}

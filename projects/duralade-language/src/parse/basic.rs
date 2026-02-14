@@ -68,7 +68,7 @@ pub(crate) fn try_parse_ident(ctx: &mut ParseContext) -> Result<Option<Ident>, P
         let node_id = ctx.alloc_node_id(start_pos, ctx.pos());
         return Ok(Some(Ident {
             node_id,
-            name,
+            name: name.into(),
             is_raw: true,
         }));
     }
@@ -94,8 +94,9 @@ pub(crate) fn try_parse_ident(ctx: &mut ParseContext) -> Result<Option<Ident>, P
                 first_invalid_pos = Some(start_pos + len);
             }
             len += ch.len_utf8();
-        } else if ch == '-' && len > 0 {
-            // Consume hyphen as part of the token for better diagnostics
+        } else if ch == '-' && len > 0 && remaining.as_bytes().get(len + 1) != Some(&b'>') {
+            // Consume hyphen as part of the token for better diagnostics,
+            // but NOT if followed by '>' (which forms the '->' access operator).
             if first_invalid_pos.is_none() {
                 first_invalid_pos = Some(start_pos + len);
             }
@@ -109,34 +110,38 @@ pub(crate) fn try_parse_ident(ctx: &mut ParseContext) -> Result<Option<Ident>, P
         return Ok(None);
     }
 
-    let name = remaining[..len].to_string();
+    // Drop the `remaining` borrow before mutating ctx
+    let _ = remaining;
     ctx.advance(len);
 
     // Check if identifier starts with a digit
     if first_char.is_ascii_digit() {
+        let name_str = ctx.source_slice(start_pos, start_pos + len);
         return Err(ParseError::with_range(
             (start_pos, start_pos + len),
-            format!("Identifier '{}' cannot start with a digit", name),
+            format!("Identifier '{}' cannot start with a digit", name_str),
             (start_pos, start_pos + 1),
         ));
     }
 
     if let Some(invalid_pos) = first_invalid_pos {
-        let invalid_char = name[invalid_pos - start_pos..].chars().next().unwrap();
+        let name_str = ctx.source_slice(start_pos, start_pos + len);
+        let invalid_char = name_str[invalid_pos - start_pos..].chars().next().unwrap();
         return Err(ParseError::with_range(
             (start_pos, start_pos + len),
             format!(
                 "Unexpected character '{}' in identifier '{}' (must be lowercase, digits, or underscore)",
-                invalid_char, name
+                invalid_char, name_str
             ),
             (invalid_pos, invalid_pos + invalid_char.len_utf8()),
         ));
     }
 
+    let sym: Symbol = ctx.source_slice(start_pos, start_pos + len).into();
     let node_id = ctx.alloc_node_id(start_pos, start_pos + len);
     Ok(Some(Ident {
         node_id,
-        name,
+        name: sym,
         is_raw: false,
     }))
 }

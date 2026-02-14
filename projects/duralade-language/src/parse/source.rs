@@ -36,6 +36,7 @@ pub(crate) fn try_parse_import(ctx: &mut ParseContext) -> Result<Option<Import>,
     };
 
     // Check for optional "as" alias
+    let end_pos = ctx.pos();
     let before_as = ctx.pos();
     let skipped_was_space = ctx.parse_trivia() == " ";
     let alias = if ctx.remaining().starts_with("as ") {
@@ -101,8 +102,9 @@ pub(crate) fn try_parse_import(ctx: &mut ParseContext) -> Result<Option<Import>,
         .wrap((start_pos, ctx.pos()), "Invalid import".to_string()));
     }
 
+    let span_end = if alias.is_some() { ctx.pos() } else { end_pos };
     Ok(Some(Import {
-        node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
+        node_id: ctx.alloc_node_id(start_pos, span_end),
         path,
         alias,
     }))
@@ -149,7 +151,7 @@ pub(crate) fn try_parse_annotation(
     // Consume '@'
     ctx.advance(1);
 
-    // Parse expression after '@' — should be ident, access, or invocation
+    // Parse expression after '@' - should be ident, access, or invocation
     let Some(expr) = parse_expr(ctx) else {
         return Err(ParseError::new(
             (start_pos, ctx.pos()),

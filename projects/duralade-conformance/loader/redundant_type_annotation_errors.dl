@@ -1,0 +1,85 @@
+# Redundant type annotations - strict violations when explicit type matches inferred
+
+data point {
+    x: int
+    y: int
+}
+
+# Anonymous data field annotations
+func redundant_anon_data_field {
+    d := data {
+        count: int = 0
+               ^^^ @@STRICT: redundant type annotation on 'count'
+        name: str = "hi"
+              ^^^ @@STRICT: redundant type annotation on 'name'
+    }
+}
+
+# Anonymous data referencing outer data type
+func redundant_anon_data_outer_ref {
+    d := data {
+        p: point = point(x = 1, y = 2)
+           ^^^^^ @@STRICT: redundant type annotation on 'p'
+    }
+}
+
+# Anonymous func field annotations
+func redundant_anon_func_field {
+    f := func {
+        in x: int = 0
+              ^^^ @@STRICT: redundant type annotation on 'x'
+        out y: str = "hi"
+               ^^^ @@STRICT: redundant type annotation on 'y'
+    }
+}
+
+# Anon func param shadows outer field - z's type should still be inferred as int
+func redundant_anon_func_shadows_field {
+    out r: int = z().r
+           ^^^ @@STRICT: redundant type annotation on 'r'
+    out x = 42
+    out z = func {
+        in x = 0
+        out r = x
+    }
+}
+
+# Field annotations that match their default's inferred type
+func redundant_field_bool {
+    out flag: bool = true
+              ^^^^ @@STRICT: redundant type annotation on 'flag'
+}
+
+func redundant_field_int {
+    out x: int = 1
+           ^^^ @@STRICT: redundant type annotation on 'x'
+}
+
+# Field annotation matching invocation return type
+func redundant_field_invocation {
+    out p: point = point(x = 1, y = 2)
+           ^^^^^ @@STRICT: redundant type annotation on 'p'
+}
+
+func redundant_field_str {
+    out name: str = "hello"
+              ^^^ @@STRICT: redundant type annotation on 'name'
+}
+
+# Sibling field reference - type matches the referenced field's type
+func redundant_sibling_ref {
+    in x: int
+    in y: int = x
+          ^^^ @@STRICT: redundant type annotation on 'y'
+}
+
+# Var statements that match their value's inferred type
+func redundant_var_int {
+    var x: int = 1
+           ^^^ @@STRICT: redundant type annotation on 'x'
+}
+
+func redundant_var_str {
+    var s: str = "hello"
+           ^^^ @@STRICT: redundant type annotation on 's'
+}

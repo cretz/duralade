@@ -1,0 +1,86 @@
+# Type inference for data, entity, and func types
+
+data point {
+    x: int
+    y: int
+}
+
+data wrapper {
+    label: str
+    p: point
+}
+
+entity counter {
+    in start: int
+    out current = start
+    value step = 1
+}
+
+# Data constructor returns named type
+func construct_data {
+    a := point(x = 1, y = 2)
+         ^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.complex_types::point
+}
+
+# Entity constructor returns named type
+func construct_entity {
+    c := counter(start = 0)
+         ^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.complex_types::counter
+}
+
+# Nested data constructor
+func construct_nested {
+    w := wrapper(label = "origin", p = point(x = 0, y = 0))
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.complex_types::wrapper
+}
+
+# Field access on entity
+func field_on_entity {
+    c := counter(start = 10)
+    a := c.current
+         ^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+# Field access on nested data
+func field_on_nested {
+    w := wrapper(label = "test", p = point(x = 3, y = 4))
+    a := w.label
+         ^^^^^^^ @@TYPE: duralade.str::str
+    b := w.p
+         ^^^ @@TYPE: loader_test.complex_types::point
+    c := w.p.x
+         ^^^^^ @@TYPE: duralade.int::int
+}
+
+# Func returning data, access nested field
+func func_returns_data {
+    r := get_point()
+    a := r.p
+         ^^^ @@TYPE: loader_test.complex_types::point
+    b := r.p.x
+         ^^^^^ @@TYPE: duralade.int::int
+}
+
+func get_point {
+    out p = point(x = 5, y = 6)
+}
+
+# Anonymous data type
+func test_anon_data {
+    d := data {
+        count = 0
+        name = "hi"
+    }
+    e := d
+         ^ @@TYPE: data { count: duralade.int::int, name: duralade.str::str }
+}
+
+# Anonymous func type
+func test_anon_func {
+    f := func {
+        in x = 0
+        out y = 1
+    }
+    g := f
+         ^ @@TYPE: func { in x: duralade.int::int, out y: duralade.int::int }
+}

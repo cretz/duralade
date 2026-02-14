@@ -1,0 +1,63 @@
+import duralade.assert
+import duralade.test
+
+func add_numbers {
+    in a: int
+    in b: int
+    out result = a + b
+}
+
+@test
+func call_chained_field_access {
+    out! :error?
+
+    assert::equal(actual = identity(x = 42).value, expected = 42)!
+}
+
+@test
+func call_nested {
+    out! :error?
+
+    r := add_numbers(a = add_numbers(a = 1, b = 2).result, b = 3)
+    assert::equal(actual = r.result, expected = 6)!
+}
+
+@test
+func call_non_nil_into_nilable_arg {
+    out! :error?
+
+    r := takes_nilable_str(s = "ok")
+    assert::equal(actual = r.value, expected = "ok")!
+}
+
+@test
+func call_with_default_arg {
+    out! :error?
+
+    r := greet(name = "world")
+    assert::equal(actual = r.message, expected = "hello")!
+}
+
+@test
+func call_with_named_args {
+    out! :error?
+
+    r := add_numbers(a = 3, b = 4)
+    assert::equal(actual = r.result, expected = 7)!
+}
+
+func greet {
+    in name: str
+    in greeting = "hello"
+    out message = greeting
+}
+
+func identity {
+    in x: int
+    out value = x
+}
+
+func takes_nilable_str {
+    in s: str?
+    out value = s
+}

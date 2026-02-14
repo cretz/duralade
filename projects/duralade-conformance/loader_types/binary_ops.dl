@@ -1,0 +1,52 @@
+# Binary operator type inference
+
+func arithmetic_float {
+    a := 1.0 + 2.0
+         ^^^^^^^^^ @@TYPE: duralade.float::float
+    b := 3.0 - 1.0
+         ^^^^^^^^^ @@TYPE: duralade.float::float
+    c := 2.0 * 3.0
+         ^^^^^^^^^ @@TYPE: duralade.float::float
+    d := 6.0 / 2.0
+         ^^^^^^^^^ @@TYPE: duralade.float::float
+}
+
+func arithmetic_int {
+    a := 1 + 2
+         ^^^^^ @@TYPE: duralade.int::int
+    b := 10 - 3
+         ^^^^^^ @@TYPE: duralade.int::int
+    c := 4 * 5
+         ^^^^^ @@TYPE: duralade.int::int
+    d := 10 / 2
+         ^^^^^^ @@TYPE: duralade.int::int
+    e := 10 % 3
+         ^^^^^^ @@TYPE: duralade.int::int
+}
+
+func comparison_ops {
+    a := 1 == 2
+         ^^^^^^ @@TYPE: duralade.bool::bool
+    b := 1 != 2
+         ^^^^^^ @@TYPE: duralade.bool::bool
+    c := 1 < 2
+         ^^^^^ @@TYPE: duralade.bool::bool
+    d := 1 <= 2
+         ^^^^^^ @@TYPE: duralade.bool::bool
+    e := 1 > 2
+         ^^^^^ @@TYPE: duralade.bool::bool
+    f := 1 >= 2
+         ^^^^^^ @@TYPE: duralade.bool::bool
+}
+
+func logical_ops {
+    a := true && false
+         ^^^^^^^^^^^^^ @@TYPE: duralade.bool::bool
+    b := true || false
+         ^^^^^^^^^^^^^ @@TYPE: duralade.bool::bool
+}
+
+func string_concat {
+    x := "hello" + " world"
+         ^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.str::str
+}

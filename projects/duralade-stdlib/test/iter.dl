@@ -1,0 +1,16 @@
+import duralade.assert
+import duralade.error
+import duralade.iter
+import duralade.test
+
+@test
+func range_basic {
+    out! :error?
+
+    sum := 0
+    for x in iter::range(end = 5) {
+        sum += x
+    }
+    # 0 + 1 + 2 + 3 + 4 = 10
+    assert::equal(actual = sum, expected = 10)!
+}

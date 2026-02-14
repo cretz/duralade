@@ -1,0 +1,15 @@
+func defer_early_return_errors {
+    defer {
+        return! 0
+        ^^^^^^^ @@ERROR: Early return 'return!' is not allowed inside defer blocks
+        x := foo()!
+                  ^ @@ERROR: Early return '!' is not allowed inside defer blocks
+
+        # Anon func inside defer CAN use !
+        f := noblock func {
+            out! :error?
+            return! 0
+            x := foo()!
+        }
+    }
+}

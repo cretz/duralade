@@ -1,0 +1,12 @@
+func literal_types {
+    x := 10
+         ^^ @@TYPE: duralade.int::int
+    y := 3.14
+         ^^^^ @@TYPE: duralade.float::float
+    z := "hello"
+         ^^^^^^^ @@TYPE: duralade.str::str
+    b := true
+         ^^^^ @@TYPE: duralade.bool::bool
+    n := false
+         ^^^^^ @@TYPE: duralade.bool::bool
+}

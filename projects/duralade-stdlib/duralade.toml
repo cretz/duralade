@@ -1,0 +1,4 @@
+[project]
+name = "duralade"
+stdlib_prelude = false
+allow_builtin = true

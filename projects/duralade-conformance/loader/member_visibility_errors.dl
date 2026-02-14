@@ -1,0 +1,23 @@
+data thing {
+    func internal_method {
+        out result: int
+    }
+}
+
+entity worker {
+    func internal_step {
+        out result: int
+    }
+}
+
+func call_private_data_member {
+    t := thing()
+    t.internal_method()
+    ^^^^^^^^^^^^^^^^^^^ @@ERROR: member 'internal_method' on 'thing' is not out (private)
+}
+
+func call_private_entity_member {
+    w := worker()
+    w.internal_step()
+    ^^^^^^^^^^^^^^^^^ @@ERROR: member 'internal_step' on 'worker' is not out (private)
+}

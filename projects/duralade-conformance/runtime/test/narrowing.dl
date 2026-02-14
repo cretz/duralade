@@ -1,0 +1,265 @@
+import duralade.assert
+import duralade.test
+
+@test
+func as_narrowing_early_returns_on_nil {
+    out! :error?
+
+    r := as_narrowing_early_returns_on_nil_helper(x = nil)
+    assert::equal(actual = r.error.message, expected = "type narrowing: value does not match expected type")!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+func as_narrowing_early_returns_on_nil_helper {
+    in x: int?
+    out result: int?
+    out! :error?
+
+    y := x as! int
+    result = 99
+}
+
+@test
+func as_narrowing_else_early_returns {
+    out! :error?
+
+    r := as_narrowing_else_early_returns_helper(x = nil)
+    assert::equal(actual = r.result, expected = -1)!
+}
+
+func as_narrowing_else_early_returns_helper {
+    in x: int?
+    out! result: int?
+
+    y := x as int else! -1
+    result = 99
+}
+
+@test
+func as_narrowing_passes_non_nil {
+    out! :error?
+
+    r := as_narrowing_passes_non_nil_helper(x = 42)!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+func as_narrowing_passes_non_nil_helper {
+    in x: int?
+    out result: int?
+    out! :error?
+
+    y := x as! int
+    result = y
+}
+
+@test
+func if_narrowing_as_enters_else_on_nil {
+    out! :error?
+
+    var x: int? = nil
+    var entered_else = false
+    if val := x as int {
+        assert::fail(message = "should not have entered then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func if_narrowing_as_enters_then {
+    out! :error?
+
+    x := 42
+    if val := x as int {
+        assert::equal(actual = val, expected = 42)!
+    }
+}
+
+@test
+func if_narrowing_as_multi_binding {
+    out! :error?
+
+    x := 10
+    y := "hello"
+    if a, b := x as int, y as str {
+        assert::equal(actual = a, expected = 10)!
+        assert::equal(actual = b, expected = "hello")!
+    }
+}
+
+@test
+func if_narrowing_else_if_chain {
+    out! :error?
+
+    var x: int? = nil
+    y := 99
+    var branch = 0
+    if val := x? {
+        assert::fail(message = "should not enter first branch")!
+    } else if val := y? {
+        branch = 2
+        assert::equal(actual = val, expected = 99)!
+    } else {
+        assert::fail(message = "should not enter else branch")!
+    }
+    assert::equal(actual = branch, expected = 2)!
+}
+
+@test
+func if_narrowing_else_if_mixed_forms {
+    out! :error?
+
+    var x: int? = nil
+    y := "hello"
+    var branch = 0
+    if val := x? {
+        assert::fail(message = "should not enter nil branch")!
+    } else if val := y as str {
+        branch = 2
+        assert::equal(actual = val, expected = "hello")!
+    }
+    assert::equal(actual = branch, expected = 2)!
+}
+
+@test
+func if_narrowing_nil_enters_else {
+    out! :error?
+
+    var x: int? = nil
+    var entered_else = false
+    if val := x? {
+        assert::fail(message = "should not have entered then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func if_narrowing_nil_enters_then {
+    out! :error?
+
+    x := 42
+    if val := x? {
+        assert::equal(actual = val, expected = 42)!
+    }
+}
+
+@test
+func if_narrowing_nil_multi_any_nil_goes_else {
+    out! :error?
+
+    x := 10
+    var y: int? = nil
+    var entered_else = false
+    if a, b := x?, y? {
+        assert::fail(message = "should not have entered then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func if_narrowing_nil_multi_binding {
+    out! :error?
+
+    x := 10
+    y := 20
+    if a, b := x?, y? {
+        assert::equal(actual = a, expected = 10)!
+        assert::equal(actual = b, expected = 20)!
+    }
+}
+
+@test
+func if_narrowing_nil_shadowing {
+    out! :error?
+
+    var x: int? = 42
+    if x := x? {
+        assert::equal(actual = x, expected = 42)!
+    }
+}
+
+@test
+func if_narrowing_nil_shadowing_nil_case {
+    out! :error?
+
+    var x: int? = nil
+    var entered_else = false
+    if x := x? {
+        assert::fail(message = "should not enter then block")!
+    } else {
+        entered_else = true
+    }
+    assert::equal(actual = entered_else, expected = true)!
+}
+
+@test
+func nil_narrowing_early_returns_on_nil {
+    out! :error?
+
+    r := nil_narrowing_early_returns_on_nil_helper(x = nil)
+    assert::equal(actual = r.error.message, expected = "unexpected nil")!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+func nil_narrowing_early_returns_on_nil_helper {
+    in x: int?
+    out result: int?
+    out! :error?
+
+    y := x?!
+    result = 99
+}
+
+@test
+func nil_narrowing_else_early_returns {
+    out! :error?
+
+    r := nil_narrowing_else_early_returns_helper(x = nil)
+    assert::equal(actual = r.result, expected = -1)!
+}
+
+func nil_narrowing_else_early_returns_helper {
+    in x: int?
+    out! result: int?
+
+    y := x? else! -1
+    result = 99
+}
+
+@test
+func nil_narrowing_else_passes_non_nil {
+    out! :error?
+
+    r := nil_narrowing_else_passes_non_nil_helper(x = 42)
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+func nil_narrowing_else_passes_non_nil_helper {
+    in x: int?
+    out! result: int?
+
+    y := x? else! -1
+    result = y
+}
+
+@test
+func nil_narrowing_passes_non_nil {
+    out! :error?
+
+    r := nil_narrowing_passes_non_nil_helper(x = 42)!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+func nil_narrowing_passes_non_nil_helper {
+    in x: int?
+    out result: int?
+    out! :error?
+
+    y := x?!
+    result = y
+}

@@ -1,0 +1,56 @@
+# TODO: runtime test for in fields referencing other in fields (non-circular)
+# TODO: loader test for circular in-field default references (should be a load error)
+
+import duralade.assert
+import duralade.test
+
+@test
+func access_multiple_out_fields {
+    out! :error?
+
+    r := multi_out(x = 10)
+    assert::equal(actual = r.a, expected = 11)!
+    assert::equal(actual = r.b, expected = 12)!
+}
+
+@test
+func bang_passes_on_success {
+    out! :error?
+
+    r := with_out_early(fail = false)!
+    assert::equal(actual = r.value, expected = 42)!
+}
+
+func multi_out {
+    in x: int
+    out a = x + 1
+    out b = x + 2
+}
+
+@test
+func out_early_failure_propagates {
+    out! :error?
+
+    r := with_out_early(fail = true)
+    assert::equal(actual = r.error != nil, expected = true)!
+}
+
+@test
+func out_early_success {
+    out! :error?
+
+    r := with_out_early(fail = false)
+    assert::equal(actual = r.error, expected = nil)!
+    assert::equal(actual = r.value, expected = 42)!
+}
+
+func with_out_early {
+    in fail: bool
+    out value: int
+    out! :error?
+
+    if fail {
+        error::fail(message = "intentional failure")!
+    }
+    value = 42
+}

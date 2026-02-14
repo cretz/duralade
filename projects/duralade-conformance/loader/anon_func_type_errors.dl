@@ -1,0 +1,20 @@
+func anon_func_out_type_mismatch {
+    needs_supplier(cb = func { out value = "nope" })
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: expected int, got str
+}
+
+func anon_kind_mismatch {
+    needs_supplier(cb = data { value = 1 })
+                        ^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: anonymous type kind mismatch
+}
+
+func anon_missing_field {
+    needs_supplier(cb = func { out other = 1 })
+                        ^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: argument 'cb' type mismatch: missing field 'value'
+}
+
+func needs_supplier {
+    in cb: func {
+        out value: int
+    }
+}

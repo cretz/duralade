@@ -1,0 +1,24 @@
+# Intype constraint errors
+
+data any_box {
+    intype t: anylocal
+    value: t
+}
+
+# Type param forwarding: anylocal param passed to any-constrained intype
+data bad_forwarding {
+    intype t: anylocal
+    item: serializable_box[t]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: type argument 't' must be serializable
+}
+
+# ERROR: func is not serializable, violates intype t (default any)
+data bad_func_in_serializable_box {
+    item: serializable_box[t = func { out value: int }]
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: type argument 't' must be serializable
+}
+
+data serializable_box {
+    intype t
+    value: t
+}

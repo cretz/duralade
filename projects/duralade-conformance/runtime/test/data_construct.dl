@@ -1,0 +1,67 @@
+import duralade.assert
+import duralade.test
+
+data labeled_point {
+    label: str
+    :point
+}
+
+data point {
+    x: int
+    y: int
+}
+
+@test
+func anon_data_construct_and_access {
+    out! :error?
+
+    p := data {
+        x = 5
+        y = 7
+    }
+    assert::equal(actual = p.x, expected = 5)!
+    assert::equal(actual = p.y, expected = 7)!
+}
+
+@test
+func anon_data_error {
+    out! :error?
+
+    assert::equal(actual = anon_data_error_helper().error?!.message, expected = "oh no")!
+}
+
+func anon_data_error_helper {
+    out! :error?
+
+    data { out! error = data { message = "oh no" } }!
+}
+
+@test
+func construct_and_access {
+    out! :error?
+
+    p := point(x = 1, y = 2)
+    assert::equal(actual = p.x, expected = 1)!
+    assert::equal(actual = p.y, expected = 2)!
+}
+
+@test
+func construct_nested {
+    out! :error?
+
+    lp := labeled_point(label = "origin", point = point(x = 0, y = 0))
+    assert::equal(actual = lp.label, expected = "origin")!
+    assert::equal(actual = lp.point.x, expected = 0)!
+}
+
+@test
+func data_equality {
+    out! :error?
+
+    a := point(x = 1, y = 2)
+    b := point(x = 1, y = 2)
+    # TODO: structural equality for data not yet implemented
+    # For now just verify field access works on both
+    assert::equal(actual = a.x, expected = b.x)!
+    assert::equal(actual = a.y, expected = b.y)!
+}

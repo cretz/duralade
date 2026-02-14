@@ -1,0 +1,9 @@
+func module_access_missing_rhs_in_expr {
+    error::
+          ^ @@ERROR: Expected identifier after '::'
+}
+
+func module_access_missing_rhs_in_type {
+    var x: error::
+                  ^ @@ERROR: Expected identifier
+}

@@ -1,0 +1,34 @@
+out entity set {
+    intype t
+    in initial_items: array[t] = []
+    value items: map[k = t, v = bool] = { }
+
+    init {
+        for item in initial_items.iter() {
+            items.set(key = item, value = true)
+        }
+    }
+
+    out noblock func add {
+        in item: t
+        items.set(key = item, value = true)
+    }
+
+    out noblock func clear {
+        items = { }
+    }
+
+    out view func contains {
+        in item: t
+        out result = items.contains_key(key = item)
+    }
+
+    out view func len {
+        out count = items.len()
+    }
+
+    out noblock func remove {
+        in item: t
+        items.remove(key = item)
+    }
+}

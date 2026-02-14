@@ -1,0 +1,38 @@
+import duralade.bool
+import duralade.int
+
+out entity yielder {
+    intype t: anylocal
+    in native_yielder: any
+    out active = true
+
+    out noblock func yield {
+        in value: t
+        out active = native_yield[t](native_yielder, value).active
+    }
+}
+
+out noblock func range {
+    in end: int
+    in start = 0
+    in step = 1
+    out iter = noblock func {
+        in :yielder[t = int]
+
+        i := start
+        for i < end {
+            yielder.yield(value = i)
+            if !yielder.active {
+                break
+            }
+            i += step
+        }
+    }
+}
+
+noblock native native_yield {
+    intype t: anylocal
+    in native_yielder: any
+    in value: t
+    out active: bool
+}

@@ -1,0 +1,27 @@
+import duralade.assert
+import duralade.test
+
+@test
+func assign_and_read {
+    out! :error?
+
+    x := 42
+    assert::equal(actual = x, expected = 42)!
+}
+
+@test
+func reassignment {
+    out! :error?
+
+    x := 1
+    x = 2
+    assert::equal(actual = x, expected = 2)!
+}
+
+@test
+func var_with_type {
+    out! :error?
+
+    count := 10
+    assert::equal(actual = count, expected = 10)!
+}

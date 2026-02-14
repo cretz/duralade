@@ -145,6 +145,11 @@ func number_int_wrong_grouping {
             ^^^^^ @@STRICT: Number should be formatted as 1_000
 }
 
+func redundant_arg_name {
+    foo(x = x)
+        ^^^^^ @@STRICT: Redundant argument name 'x', use shorthand form
+}
+
 func shorthand_arg_not_derivable {
     foo(1 + 2)
         ^^^^^ @@ERROR: Argument name required for non-identifier expressions

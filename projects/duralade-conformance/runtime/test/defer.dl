@@ -1,0 +1,123 @@
+import duralade.assert
+import duralade.test
+
+# TODO: parser should reject `!` (early return) inside defer blocks (spec 9.6)
+
+@test
+func basic_defer {
+    out! :error?
+
+    r := basic_defer_helper()
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+noblock func basic_defer_helper {
+    out result = 0
+
+    defer {
+        result = 42
+    }
+}
+
+@test
+func defer_in_defer {
+    out! :error?
+
+    r := defer_in_defer_helper()
+    assert::equal(actual = r.result, expected = 55)!
+}
+
+noblock func defer_in_defer_helper {
+    out result = 0
+
+    defer {
+        defer {
+            result = 55
+        }
+    }
+}
+
+@test
+func lifo_order {
+    out! :error?
+
+    r := lifo_order_helper()
+    # First defer sets result=3, second defer multiplies by 10 => 30
+    assert::equal(actual = r.result, expected = 30)!
+}
+
+noblock func lifo_order_helper {
+    out result = 0
+
+    defer {
+        # Runs second: multiply by 10
+        result *= 10
+    }
+    defer {
+        # Runs first: set to 3
+        result = 3
+    }
+}
+
+@test
+func multiple_defers {
+    out! :error?
+
+    r := multiple_defers_helper()
+    # LIFO: 100 + 10 + 1 = 111
+    assert::equal(actual = r.result, expected = 111)!
+}
+
+noblock func multiple_defers_helper {
+    out result = 0
+
+    defer {
+        # Runs third
+        result += 1
+    }
+    defer {
+        # Runs second
+        result += 10
+    }
+    defer {
+        # Runs first
+        result += 100
+    }
+}
+
+@test
+func runs_on_early_return {
+    out! :error?
+
+    r := runs_on_early_return_helper()
+    assert::equal(actual = r.result, expected = 7)!
+}
+
+noblock func runs_on_early_return_helper {
+    out! result = 0
+
+    defer {
+        result = 7
+    }
+    return! 0
+}
+
+@test
+func sees_mutations {
+    out! :error?
+
+    r := sees_mutations_helper()
+    # Defer captures bindings, not values - sees x=99
+    assert::equal(actual = r.result, expected = 99)!
+}
+
+noblock func sees_mutations_helper {
+    out result = 0
+
+    x := 1
+    defer {
+        result = x
+    }
+    # Mutate x after defer registration - defer should see this
+    x = 99
+}

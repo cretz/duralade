@@ -1,0 +1,15 @@
+import duralade.int
+
+out builtin data str {
+    out view func contains {
+        in substr: str
+        in bytes = false
+        out result = find(substr, bytes).result != nil
+    }
+
+    out builtin view func find {
+        in substr: str
+        in bytes = false
+        out result: int?
+    }
+}

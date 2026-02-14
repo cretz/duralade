@@ -1,0 +1,25 @@
+# Map method type errors with generic substitution
+
+func get_result_wrong_type {
+    m := { "a" = 1 }
+    var s: str = m.get(key = "a").result
+                 ^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: cannot assign int? to variable of type str
+}
+
+func get_wrong_key_type {
+    m := { "a" = 1 }
+    m.get(key = 42)
+                ^^ @@ERROR: argument 'key' type mismatch: expected str, got int
+}
+
+func set_wrong_key_type {
+    m := { "a" = 1 }
+    m.set(key = 42, value = 2)
+                ^^ @@ERROR: argument 'key' type mismatch: expected str, got int
+}
+
+func set_wrong_value_type {
+    m := { "a" = 1 }
+    m.set(key = "b", value = "hello")
+                             ^^^^^^^ @@ERROR: argument 'value' type mismatch: expected int, got str
+}

@@ -2,7 +2,7 @@ use crate::model::*;
 
 use super::basic::try_parse_ident;
 use super::construct::starts_with_keyword;
-use super::{IndentOpener, ParseContext, ParseError};
+use super::{ParseContext, ParseError};
 
 /// Parse a type reference: type_inner followed by optional `?` for nilable.
 pub(crate) fn parse_type(ctx: &mut ParseContext) -> Type {
@@ -39,15 +39,63 @@ fn parse_type_inner(ctx: &mut ParseContext, start_pos: usize) -> Type {
         return ty;
     }
 
-    // Named type: qualified path
-    let path = match ctx.parse_qualified_ident() {
-        Ok(path) => path,
+    // Named type: parse first ident, then check for :: (module access) or . (qualified path)
+    let first_ident = match try_parse_ident(ctx) {
+        Ok(Some(ident)) => ident,
+        Ok(None) => {
+            let char_end = ctx.pos() + ctx.next_char_len();
+            ctx.add_parse_error(ParseError::with_range(
+                (start_pos, ctx.pos()),
+                "Expected identifier".to_string(),
+                (ctx.pos(), char_end),
+            ));
+            return Type::Invalid(InvalidNode {
+                node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
+            });
+        }
         Err(err) => {
             ctx.add_parse_error(err);
             return Type::Invalid(InvalidNode {
                 node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
             });
         }
+    };
+
+    // Check for `::` - module access: `module::path.path`
+    let (module, path) = if ctx.remaining().starts_with("::") {
+        ctx.advance(2);
+        match ctx.parse_qualified_ident() {
+            Ok(path) => (Some(first_ident), path),
+            Err(err) => {
+                ctx.add_parse_error(err);
+                return Type::Invalid(InvalidNode {
+                    node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
+                });
+            }
+        }
+    } else {
+        // Continue with dot-separated path (first_ident is the first segment)
+        let mut path = vec![first_ident];
+        while ctx.remaining().starts_with('.') {
+            ctx.advance(1);
+            match try_parse_ident(ctx) {
+                Ok(Some(ident)) => path.push(ident),
+                Ok(None) => {
+                    let char_end = ctx.pos() + ctx.next_char_len();
+                    ctx.add_parse_error(ParseError::with_range(
+                        (start_pos, ctx.pos()),
+                        "Expected identifier after '.'".to_string(),
+                        (ctx.pos(), char_end),
+                    ));
+                    break;
+                }
+                Err(err) => {
+                    ctx.add_parse_error(err);
+                    break;
+                }
+            }
+        }
+        (None, path)
     };
 
     // Optional type arguments: [arg, arg, ...]
@@ -59,6 +107,7 @@ fn parse_type_inner(ctx: &mut ParseContext, start_pos: usize) -> Type {
 
     let named = TypeNamed {
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
+        module,
         path,
         type_args,
     };
@@ -150,12 +199,16 @@ fn parse_type_argument(ctx: &mut ParseContext) -> Option<TypeArgument> {
 
     let ty = parse_type(ctx);
 
-    // Check for `= type` — the LHS type must be a bare identifier (named, no type args)
+    // Check for `= type` - the LHS type must be a bare identifier (named, no type args)
     let before_eq = ctx.pos();
     let spaces_before = ctx.skip_spaces();
     if ctx.remaining().starts_with('=') && !ctx.remaining().starts_with("==") {
         let name = match &ty {
-            Type::Named(named) if named.type_args.is_empty() && named.path.len() == 1 => {
+            Type::Named(named)
+                if named.module.is_none()
+                    && named.type_args.is_empty()
+                    && named.path.len() == 1 =>
+            {
                 named.path[0].clone()
             }
             _ => {
@@ -165,7 +218,7 @@ fn parse_type_argument(ctx: &mut ParseContext) -> Option<TypeArgument> {
                 ));
                 Ident {
                     node_id: ctx.alloc_node_id(arg_start, before_eq),
-                    name: "<unknown>".to_string(),
+                    name: Symbol::unknown(),
                     is_raw: false,
                 }
             }
@@ -188,6 +241,21 @@ fn parse_type_argument(ctx: &mut ParseContext) -> Option<TypeArgument> {
         ctx.parse_trivia();
 
         let value = parse_type(ctx);
+
+        if let Type::Named(ref named) = value
+            && named.module.is_none()
+            && named.type_args.is_empty()
+            && named.path.len() == 1
+            && named.path[0].name == name.name
+        {
+            ctx.add_strict_violation(ParseError::new(
+                (arg_start, ctx.pos()),
+                format!(
+                    "Redundant type argument name '{}', use shorthand form",
+                    ctx.ident_str(&name)
+                ),
+            ));
+        }
 
         Some(TypeArgument {
             node_id: ctx.alloc_node_id(arg_start, ctx.pos()),
@@ -262,7 +330,7 @@ fn try_parse_type_anonymous(ctx: &mut ParseContext, start_pos: usize) -> Option<
         return None;
     };
 
-    // Peek past keyword(s) and spaces — must see `{`
+    // Peek past keyword(s) and spaces - must see `{`
     let after_keyword = remaining[skip..].trim_start_matches(' ');
     if !after_keyword.starts_with('{') {
         return None;
@@ -282,7 +350,7 @@ fn parse_type_anonymous_body(
     construct: TypeAnonConstruct,
 ) -> Type {
     ctx.advance(1); // "{"
-    ctx.indent(IndentOpener::Brace);
+    ctx.indent(b'{');
 
     let mut fields = Vec::new();
     loop {
@@ -291,6 +359,7 @@ fn parse_type_anonymous_body(
         if peek.is_empty() || peek.starts_with('}') {
             break;
         }
+        let pos_before = ctx.pos();
         ctx.parse_trivia();
         if ctx.remaining().starts_with('}') || ctx.remaining().is_empty() {
             break;
@@ -303,6 +372,9 @@ fn parse_type_anonymous_body(
                 "Unrecognized content in anonymous type".to_string(),
             ));
             ctx.skip_past_end_of_line();
+        }
+        if ctx.pos() == pos_before {
+            break;
         }
     }
 
@@ -329,10 +401,11 @@ fn parse_type_anon_field(ctx: &mut ParseContext) -> Option<TypeAnonField> {
     // Parse optional modifier
     let modifier_word = remaining.split(' ').next().unwrap_or("");
     let (modifier, modifier_len) = match modifier_word {
-        "in" => (Some(TypeAnonFieldModifier::In), 3), // "in" + implicit space consumed below
+        "implicit" => (Some(TypeAnonFieldModifier::Implicit), 9),
+        "in" => (Some(TypeAnonFieldModifier::In), 3),
+        "inout" => (Some(TypeAnonFieldModifier::Inout), 6),
         "out!" => (Some(TypeAnonFieldModifier::OutEarly), 5),
         "out" => (Some(TypeAnonFieldModifier::Out), 4),
-        "inout" => (Some(TypeAnonFieldModifier::Inout), 6),
         _ => (None, 0),
     };
 
@@ -367,7 +440,7 @@ fn parse_type_anon_field(ctx: &mut ParseContext) -> Option<TypeAnonField> {
     let before_colon = ctx.pos();
     let spaces_before_colon = ctx.skip_spaces();
     if !ctx.remaining().starts_with(':') {
-        // No `:` — not a valid anonymous type field
+        // No `:` - not a valid anonymous type field
         if modifier.is_none() && name_opt.is_none() {
             ctx.set_pos(start_pos);
             return None;
@@ -395,7 +468,8 @@ fn parse_type_anon_field(ctx: &mut ParseContext) -> Option<TypeAnonField> {
 
     ctx.advance(1); // ":"
     let after_colon = ctx.pos();
-    if ctx.skip_spaces() != 1 {
+    let spaces_after_colon = ctx.skip_spaces();
+    if name_opt.is_some() && spaces_after_colon != 1 {
         ctx.add_strict_violation(ctx.spacing_error(
             after_colon,
             "Expected exactly one space after ':'".to_string(),
@@ -407,11 +481,7 @@ fn parse_type_anon_field(ctx: &mut ParseContext) -> Option<TypeAnonField> {
     // Derive name from type for shorthand `:type` form
     let name = name_opt.or_else(|| {
         if let Type::Named(named) = &ty {
-            if named.type_args.is_empty() {
-                named.path.last().cloned()
-            } else {
-                None
-            }
+            named.path.last().cloned()
         } else {
             None
         }

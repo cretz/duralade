@@ -1,0 +1,9 @@
+import duralade.assert
+import duralade.test
+
+@test
+func one_plus_one {
+    out! :error?
+
+    assert::equal(actual = 1 + 1, expected = 2)!
+}

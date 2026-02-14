@@ -1,0 +1,16 @@
+import duralade.str
+
+out type error = data {
+    message: str
+}
+
+out data simple {
+    message: str
+}
+
+out func fail {
+    in message: str
+    out! :error?
+
+    error = simple(message)
+}

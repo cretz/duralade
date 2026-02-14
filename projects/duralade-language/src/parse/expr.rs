@@ -3,7 +3,7 @@ use crate::model::*;
 use super::basic::try_parse_ident;
 use super::construct::{parse_data, parse_func, starts_with_keyword};
 use super::types::{parse_type, parse_type_arguments};
-use super::{IndentOpener, ParseContext, ParseError};
+use super::{ParseContext, ParseError};
 
 /// Parse `else! expr`. Returns None if `else!` not found at current position.
 fn parse_else_bang(ctx: &mut ParseContext) -> Option<Expr> {
@@ -101,6 +101,7 @@ fn parse_binary(ctx: &mut ParseContext, min_prec: u8) -> Option<Expr> {
         }
 
         // Consume operator
+        let op_pos = ctx.pos();
         ctx.advance(op_len);
 
         // Strict: exactly one space before operator
@@ -112,7 +113,7 @@ fn parse_binary(ctx: &mut ParseContext, min_prec: u8) -> Option<Expr> {
         }
         // Allow line continuation after operator (may cross newlines,
         // comments, blank lines). Snapshot so we can roll back if no
-        // right operand is found — the trivia crossing is speculative.
+        // right operand is found - the trivia crossing is speculative.
         let after_op = ctx.pos();
         let snap = ctx.snapshot();
         ctx.parse_trivia();
@@ -130,8 +131,10 @@ fn parse_binary(ctx: &mut ParseContext, min_prec: u8) -> Option<Expr> {
                 ));
                 // Consume rest of the line for clean recovery
                 ctx.skip_past_end_of_line();
+                let node_id = ctx.alloc_node_id(start, ctx.pos());
+                ctx.set_op_position(node_id, op_pos);
                 left = Expr::Binary(ExprBinary {
-                    node_id: ctx.alloc_node_id(start, ctx.pos()),
+                    node_id,
                     left: Box::new(left),
                     op,
                     right: Box::new(Expr::Invalid(InvalidNode {
@@ -142,8 +145,10 @@ fn parse_binary(ctx: &mut ParseContext, min_prec: u8) -> Option<Expr> {
             }
         };
 
+        let node_id = ctx.alloc_node_id(start, ctx.pos());
+        ctx.set_op_position(node_id, op_pos);
         left = Expr::Binary(ExprBinary {
-            node_id: ctx.alloc_node_id(start, ctx.pos()),
+            node_id,
             left: Box::new(left),
             op,
             right: Box::new(right),
@@ -159,6 +164,7 @@ fn parse_unary(ctx: &mut ParseContext) -> Option<Expr> {
     let first = ctx.remaining().chars().next()?;
 
     if first == '-' || first == '!' {
+        let op_pos = ctx.pos();
         let op = if first == '-' {
             ExprUnaryOp::Negate
         } else {
@@ -178,8 +184,10 @@ fn parse_unary(ctx: &mut ParseContext) -> Option<Expr> {
                 })
             }
         };
+        let node_id = ctx.alloc_node_id(start, ctx.pos());
+        ctx.set_op_position(node_id, op_pos);
         return Some(Expr::Unary(ExprUnary {
-            node_id: ctx.alloc_node_id(start, ctx.pos()),
+            node_id,
             op,
             expr: Box::new(operand),
         }));
@@ -237,7 +245,7 @@ fn parse_postfix(ctx: &mut ParseContext) -> Option<Expr> {
             }
         }
 
-        // Nil narrowing: `?!` or `? else! expr` — before `!` early return check
+        // Nil narrowing: `?!` or `? else! expr` - before `!` early return check
         // In if-narrowing context, skip bare `?` so it's consumed as the condition marker
         if remaining.starts_with('?')
             && !remaining.starts_with("?.")
@@ -246,6 +254,12 @@ fn parse_postfix(ctx: &mut ParseContext) -> Option<Expr> {
             ctx.advance(1); // consume `?`
             let narrow_start = ctx.pos();
             let else_expr = if ctx.remaining().starts_with('!') {
+                if ctx.defer_depth > 0 {
+                    ctx.add_parse_error(ParseError::new(
+                        (ctx.pos(), ctx.pos() + 1),
+                        "Early return '!' is not allowed inside defer blocks".to_string(),
+                    ));
+                }
                 ctx.advance(1);
                 None
             } else {
@@ -272,11 +286,20 @@ fn parse_postfix(ctx: &mut ParseContext) -> Option<Expr> {
             continue;
         }
 
-        // Postfix `!` (early return) — but not `!=`
+        // Postfix `!` (early return) - but not `!=`
         if remaining.starts_with('!') && !remaining.starts_with("!=") {
+            if ctx.defer_depth > 0 {
+                ctx.add_parse_error(ParseError::new(
+                    (ctx.pos(), ctx.pos() + 1),
+                    "Early return '!' is not allowed inside defer blocks".to_string(),
+                ));
+            }
+            let op_pos = ctx.pos();
             ctx.advance(1);
+            let node_id = ctx.alloc_node_id(start, ctx.pos());
+            ctx.set_op_position(node_id, op_pos);
             expr = Expr::Unary(ExprUnary {
-                node_id: ctx.alloc_node_id(start, ctx.pos()),
+                node_id,
                 op: ExprUnaryOp::EarlyReturn,
                 expr: Box::new(expr),
             });
@@ -293,9 +316,12 @@ fn parse_postfix(ctx: &mut ParseContext) -> Option<Expr> {
             if ctx.remaining().starts_with('(') {
                 let opener_pos = ctx.pos();
                 ctx.advance(1);
-                ctx.indent(IndentOpener::Paren);
+                ctx.indent(b'(');
                 let (args, trailing_comma_pos) = parse_invocation_args(ctx, opener_pos);
-                let had_space = { let t = ctx.parse_trivia(); !t.is_empty() && !t.contains('\n') };
+                let (had_space, closer_on_own_line) = {
+                    let t = ctx.parse_trivia();
+                    (!t.is_empty() && !t.contains('\n'), t.contains('\n'))
+                };
                 ctx.dedent();
                 if ctx.remaining().starts_with(')') {
                     if had_space {
@@ -305,7 +331,14 @@ fn parse_postfix(ctx: &mut ParseContext) -> Option<Expr> {
                         ));
                     }
                     let multiline = ctx.is_multiline(opener_pos, ctx.pos());
-                    if multiline && trailing_comma_pos.is_none() && !args.is_empty() {
+                    // Only require trailing comma when `)` starts its own line.
+                    // When `)` follows `}` on the same line (e.g. `handler = func { ... })`),
+                    // there's no natural place for a trailing comma.
+                    if multiline
+                        && closer_on_own_line
+                        && trailing_comma_pos.is_none()
+                        && !args.is_empty()
+                    {
                         ctx.add_strict_violation(ParseError::new(
                             (ctx.pos(), ctx.pos() + 1),
                             "Trailing comma required in multi-line form".to_string(),
@@ -355,6 +388,12 @@ fn parse_postfix(ctx: &mut ParseContext) -> Option<Expr> {
                 let narrow_start = before_as + spaces; // start of `as`
                 let (ty, else_expr) = if ctx.remaining().starts_with('!') {
                     // as! type
+                    if ctx.defer_depth > 0 {
+                        ctx.add_parse_error(ParseError::new(
+                            (ctx.pos(), ctx.pos() + 1),
+                            "Early return '!' is not allowed inside defer blocks".to_string(),
+                        ));
+                    }
                     ctx.advance(1);
                     ctx.skip_spaces();
                     (parse_type(ctx), None)
@@ -425,7 +464,7 @@ fn parse_invocation_args(
             break;
         };
 
-        // Check for `=` (named arg) — but not `==`
+        // Check for `=` (named arg) - but not `==`
         let before_eq = ctx.pos();
         let spaces_before_eq = ctx.skip_spaces();
         if ctx.remaining().starts_with('=') && !ctx.remaining().starts_with("==") {
@@ -455,7 +494,7 @@ fn parse_invocation_args(
                     ));
                     Ident {
                         node_id: ctx.alloc_node_id(arg_start, before_eq),
-                        name: "<unknown>".to_string(),
+                        name: Symbol::unknown(),
                         is_raw: false,
                     }
                 }
@@ -470,13 +509,25 @@ fn parse_invocation_args(
                 break;
             };
 
+            if let Expr::Ident(ref val_ident) = value
+                && val_ident.name == name.name
+            {
+                ctx.add_strict_violation(ParseError::new(
+                    (arg_start, ctx.pos()),
+                    format!(
+                        "Redundant argument name '{}', use shorthand form",
+                        ctx.ident_str(&name)
+                    ),
+                ));
+            }
+
             args.push(ExprInvocationArg {
                 node_id: ctx.alloc_node_id(arg_start, ctx.pos()),
                 name,
                 value,
             });
         } else {
-            // Shorthand arg — derive name from last identifier
+            // Shorthand arg - derive name from last identifier
             ctx.set_pos(before_eq);
             let name = match &arg_expr {
                 Expr::Ident(ident) => ident.clone(),
@@ -488,7 +539,7 @@ fn parse_invocation_args(
                     ));
                     Ident {
                         node_id: ctx.alloc_node_id(arg_start, before_eq),
-                        name: "<unknown>".to_string(),
+                        name: Symbol::unknown(),
                         is_raw: false,
                     }
                 }
@@ -522,7 +573,7 @@ fn parse_invocation_args(
         if ctx.remaining().starts_with(',') {
             let comma_pos = ctx.pos();
             ctx.advance(1);
-            // Peek again after comma — trailing comma if closer follows
+            // Peek again after comma - trailing comma if closer follows
             let peek = ctx.remaining().trim_start_matches([' ', '\n', '\r']);
             if peek.starts_with(')') || peek.is_empty() {
                 trailing_comma_pos = Some(comma_pos);
@@ -541,6 +592,34 @@ fn parse_invocation_args(
 }
 
 /// Parse a primary (atomic) expression
+/// After parsing an identifier, check for `::` to produce ModuleAccess or plain Ident.
+fn parse_ident_or_module_access(ctx: &mut ParseContext, start: usize, ident: Ident) -> Expr {
+    if ctx.remaining().starts_with("::") {
+        ctx.advance(2);
+        match try_parse_ident(ctx) {
+            Ok(Some(name)) => Expr::ModuleAccess(ExprModuleAccess {
+                node_id: ctx.alloc_node_id(start, ctx.pos()),
+                module: ident,
+                name,
+            }),
+            Ok(None) => {
+                ctx.add_parse_error(ctx.error_here("Expected identifier after '::'".to_string()));
+                Expr::Invalid(InvalidNode {
+                    node_id: ctx.alloc_node_id(start, ctx.pos()),
+                })
+            }
+            Err(err) => {
+                ctx.add_parse_error(err);
+                Expr::Invalid(InvalidNode {
+                    node_id: ctx.alloc_node_id(start, ctx.pos()),
+                })
+            }
+        }
+    } else {
+        Expr::Ident(ident)
+    }
+}
+
 fn parse_primary(ctx: &mut ParseContext) -> Option<Expr> {
     let start = ctx.pos();
     let first = ctx.remaining().chars().next()?;
@@ -548,7 +627,7 @@ fn parse_primary(ctx: &mut ParseContext) -> Option<Expr> {
     // Parenthesized expression
     if first == '(' {
         ctx.advance(1);
-        ctx.indent(IndentOpener::Paren);
+        ctx.indent(b'(');
         ctx.parse_trivia();
         let inner = match parse_expr(ctx) {
             Some(e) => e,
@@ -688,6 +767,82 @@ fn parse_primary(ctx: &mut ParseContext) -> Option<Expr> {
                     condition: Box::new(condition),
                 }))
             }
+            "spawn" => {
+                ctx.advance(5);
+                if !ctx.remaining().starts_with('(') {
+                    ctx.add_parse_error(ctx.error_here("Expected '(' after 'spawn'".to_string()));
+                    return Some(Expr::Invalid(InvalidNode {
+                        node_id: ctx.alloc_node_id(start, ctx.pos()),
+                    }));
+                }
+                let opener_pos = ctx.pos();
+                ctx.advance(1); // consume '('
+                ctx.indent(b'(');
+                ctx.parse_trivia();
+
+                // First arg: the entity invocation expression
+                let invocation = match parse_expr(ctx) {
+                    Some(e) => e,
+                    None => {
+                        ctx.add_parse_error(ParseError::new(
+                            (start, ctx.pos()),
+                            "Expected invocation expression in 'spawn'".to_string(),
+                        ));
+                        Expr::Invalid(InvalidNode {
+                            node_id: ctx.alloc_node_id(ctx.pos(), ctx.pos()),
+                        })
+                    }
+                };
+
+                if !matches!(&invocation, Expr::Invocation(_) | Expr::Invalid(_)) {
+                    ctx.add_parse_error(ParseError::new(
+                        (opener_pos + 1, ctx.pos()),
+                        "First argument to 'spawn' must be an invocation".to_string(),
+                    ));
+                }
+                ctx.parse_trivia();
+
+                // Optional named args: only `id` is valid
+                let mut spawn_id: Option<Box<Expr>> = None;
+                if ctx.remaining().starts_with(',') {
+                    ctx.advance(1); // consume ','
+                    ctx.check_comma_spacing();
+                    ctx.parse_trivia();
+                    let (args, _trailing) = parse_invocation_args(ctx, opener_pos);
+                    let id_sym = Symbol::id();
+                    for arg in &args {
+                        if arg.name.name == id_sym {
+                            spawn_id = Some(Box::new(arg.value.clone()));
+                        } else {
+                            let span = ctx.node_span(arg.node_id);
+                            ctx.add_parse_error(ParseError::new(
+                                span,
+                                format!(
+                                    "Unknown spawn argument '{}', expected 'id'",
+                                    ctx.ident_str(&arg.name)
+                                ),
+                            ));
+                        }
+                    }
+                }
+
+                ctx.parse_trivia();
+                ctx.dedent();
+                if ctx.remaining().starts_with(')') {
+                    ctx.advance(1);
+                } else {
+                    ctx.add_parse_error(ParseError::new(
+                        (start, ctx.pos()),
+                        "Expected ')' after spawn arguments".to_string(),
+                    ));
+                }
+
+                Some(Expr::Spawn(ExprSpawn {
+                    node_id: ctx.alloc_node_id(start, ctx.pos()),
+                    invocation: Box::new(invocation),
+                    id: spawn_id,
+                }))
+            }
             "data" => {
                 ctx.advance(4);
                 let data = parse_data(ctx, start, true);
@@ -726,7 +881,7 @@ fn parse_primary(ctx: &mut ParseContext) -> Option<Expr> {
                     Some(Expr::AnonFunc(parse_func(ctx, start, is_view, !is_view)))
                 } else {
                     match try_parse_ident(ctx) {
-                        Ok(Some(ident)) => Some(Expr::Ident(ident)),
+                        Ok(Some(ident)) => Some(parse_ident_or_module_access(ctx, start, ident)),
                         Ok(None) => None,
                         Err(err) => {
                             ctx.add_parse_error(err);
@@ -738,7 +893,7 @@ fn parse_primary(ctx: &mut ParseContext) -> Option<Expr> {
                 }
             }
             _ => match try_parse_ident(ctx) {
-                Ok(Some(ident)) => Some(Expr::Ident(ident)),
+                Ok(Some(ident)) => Some(parse_ident_or_module_access(ctx, start, ident)),
                 Ok(None) => None,
                 Err(err) => {
                     ctx.add_parse_error(err);
@@ -803,7 +958,7 @@ fn format_with_underscores(digits: &str, from_right: bool) -> String {
     for (i, ch) in digits.char_indices() {
         if i > 0 {
             let sep = if from_right {
-                (len - i) % 3 == 0
+                (len - i).is_multiple_of(3)
             } else {
                 i % 3 == 0
             };
@@ -1065,7 +1220,7 @@ fn parse_string_raw(ctx: &mut ParseContext) -> Expr {
 fn parse_array_literal(ctx: &mut ParseContext) -> Expr {
     let start = ctx.pos();
     ctx.advance(1); // "["
-    ctx.indent(IndentOpener::Bracket);
+    ctx.indent(b'[');
     // Strict: no space after '['
     if ctx.remaining().starts_with(' ') {
         ctx.add_strict_violation(ParseError::new(
@@ -1127,7 +1282,9 @@ fn parse_array_literal(ctx: &mut ParseContext) -> Expr {
         let item_start = ctx.pos();
         match parse_expr(ctx) {
             Some(expr) => {
-                if !ctx.is_multiline(prev_item_start, item_start) && ctx.is_multiline(start, item_start) {
+                if !ctx.is_multiline(prev_item_start, item_start)
+                    && ctx.is_multiline(start, item_start)
+                {
                     ctx.add_strict_violation(ParseError::new(
                         (item_start, item_start + 1),
                         "Only one item per line allowed in multi-line form".to_string(),
@@ -1186,16 +1343,15 @@ fn parse_array_literal(ctx: &mut ParseContext) -> Expr {
 fn parse_map_literal(ctx: &mut ParseContext) -> Expr {
     let start = ctx.pos();
     ctx.advance(1); // "{"
-    ctx.indent(IndentOpener::Brace);
+    ctx.indent(b'{');
     // Strict: space or newline required after '{'
     if !ctx.remaining().starts_with(' ')
         && !ctx.remaining().starts_with('\n')
         && !ctx.remaining().starts_with("\r\n")
     {
-        ctx.add_strict_violation(ctx.spacing_error(
-            ctx.pos(),
-            "Expected space or newline after '{'".to_string(),
-        ));
+        ctx.add_strict_violation(
+            ctx.spacing_error(ctx.pos(), "Expected space or newline after '{'".to_string()),
+        );
     }
     ctx.parse_trivia();
 
@@ -1240,7 +1396,8 @@ fn parse_map_literal(ctx: &mut ParseContext) -> Expr {
         ctx.parse_trivia();
         let item_start = ctx.pos();
         if let Some(entry) = parse_map_entry(ctx) {
-            if !ctx.is_multiline(prev_item_start, item_start) && ctx.is_multiline(start, item_start) {
+            if !ctx.is_multiline(prev_item_start, item_start) && ctx.is_multiline(start, item_start)
+            {
                 ctx.add_strict_violation(ParseError::new(
                     (item_start, item_start + 1),
                     "Only one item per line allowed in multi-line form".to_string(),

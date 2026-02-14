@@ -8,6 +8,7 @@ pub struct Construct {
     pub node_id: NodeId,
     pub annotations: Vec<Annotation>,
     pub out: bool,
+    pub builtin: bool,
     pub name: Ident,
     pub kind: ConstructKind,
 }
@@ -62,11 +63,11 @@ pub struct FieldVar {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FieldVarModifier {
     In,
+    Inout,
     Out,
     OutEarly,
-    Inout,
-    Value,
     Implicit,
+    Value,
 }
 
 /// Spec 8.3 - type_alias

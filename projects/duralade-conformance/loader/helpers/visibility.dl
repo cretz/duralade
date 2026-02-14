@@ -1,0 +1,11 @@
+data private_data {
+    x: int
+}
+
+entity private_entity {
+    in x: int
+}
+
+func private_func {
+    out result: int
+}

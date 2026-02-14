@@ -1,0 +1,41 @@
+import duralade.assert
+import duralade.error
+import duralade.test
+
+@test
+func contains_false {
+    out! :error?
+
+    assert::false(actual = "hello".contains(substr = "xyz").result)!
+}
+
+@test
+func contains_true {
+    out! :error?
+
+    assert::true(actual = "hello world".contains(substr = "world").result)!
+}
+
+@test
+func find_bytes_mode {
+    out! :error?
+
+    result := "hello".find(substr = "llo", bytes = true)
+    assert::equal(actual = result.result, expected = 2)!
+}
+
+@test
+func find_returns_char_index {
+    out! :error?
+
+    result := "hello world".find(substr = "world")
+    assert::equal(actual = result.result, expected = 6)!
+}
+
+@test
+func find_returns_nil_when_not_found {
+    out! :error?
+
+    result := "hello".find(substr = "xyz")
+    assert::nil(actual = result.result)!
+}

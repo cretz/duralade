@@ -1,0 +1,88 @@
+func break_in_anon_func_inside_for {
+    out result: int
+
+    for {
+        callback := func {
+            break
+            ^^^^^ @@ERROR: 'break' is not inside a for loop
+        }
+    }
+}
+
+func break_in_nested_anon_func {
+    out result: int
+
+    for {
+        wrapper := func {
+            inner := func {
+                break
+                ^^^^^ @@ERROR: 'break' is not inside a for loop
+            }
+        }
+    }
+}
+
+func break_label_across_anon_func {
+    out result: int
+
+    for:loop1 {
+        callback := func {
+            break:loop1
+            ^^^^^^^^^^^ @@ERROR: 'break:loop1' is not inside a for loop with label 'loop1'
+        }
+    }
+}
+
+func break_outside_for {
+    out result: int
+
+    break
+    ^^^^^ @@ERROR: 'break' is not inside a for loop
+}
+
+func break_with_unknown_label {
+    out result: int
+
+    for {
+        break:missing
+        ^^^^^^^^^^^^^ @@ERROR: 'break:missing' is not inside a for loop with label 'missing'
+    }
+}
+
+func continue_in_anon_func_inside_for {
+    out result: int
+
+    for {
+        callback := func {
+            continue
+            ^^^^^^^^ @@ERROR: 'continue' is not inside a for loop
+        }
+    }
+}
+
+func continue_label_across_anon_func {
+    out result: int
+
+    for:loop1 {
+        callback := func {
+            continue:loop1
+            ^^^^^^^^^^^^^^ @@ERROR: 'continue:loop1' is not inside a for loop with label 'loop1'
+        }
+    }
+}
+
+func continue_outside_for {
+    out result: int
+
+    continue
+    ^^^^^^^^ @@ERROR: 'continue' is not inside a for loop
+}
+
+func continue_with_unknown_label {
+    out result: int
+
+    for {
+        continue:missing
+        ^^^^^^^^^^^^^^^^ @@ERROR: 'continue:missing' is not inside a for loop with label 'missing'
+    }
+}

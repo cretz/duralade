@@ -1,0 +1,54 @@
+out data point {
+    x: int
+    y: int
+}
+
+out entity volley_shot {
+    in points: array[t = point]
+    in max_concurrent = points.len()
+    value running = 0
+
+    run {
+        out hit = false
+        out! :error?
+
+        # Start all shoots with concurrency control
+        var tasks: array[task[t = shoot_one@typeout]] = []
+        for point in points.iter() {
+            tasks.push(task = task(work = shoot_one(point)))
+        }
+
+        # Check each as they complete, return on first hit
+        # Only propagate errors if no hits found
+        var last_error: error?
+        for completed in task::completed_iter(tasks) {
+            if err := completed.result.error? {
+                last_error = err
+            } else if completed.result.hit {
+                hit = true
+                return
+            }
+        }
+
+        # No hits found, return error if any occurred
+        error = last_error
+    }
+
+    func shoot_one {
+        in :point
+        out hit = false
+        out! :error?
+
+        # Wait for room in concurrency limit
+        wait(running < max_concurrent)!
+        running += 1
+        defer { running -= 1 }
+
+        hit = shoot(point).hit
+    }
+}
+
+extern shoot {
+    in point: point
+    out hit: bool
+}

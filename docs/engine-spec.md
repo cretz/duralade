@@ -25,15 +25,23 @@
      - 4.3.7. [`duralade entity invoke-func-noblock`](#437-duralade-entity-invoke-func-noblock)
      - 4.3.8. [`duralade entity complete-extern`](#438-duralade-entity-complete-extern)
      - 4.3.9. [`duralade entity cancel`](#439-duralade-entity-cancel)
-     - 4.3.10. [`duralade entity checkpoint`](#4310-duralade-entity-checkpoint)
-     - 4.3.11. [`duralade entity terminate`](#4311-duralade-entity-terminate)
-     - 4.3.12. [`duralade entity shell`](#4312-duralade-entity-shell)
+     - 4.3.10. [`duralade entity cancel-func`](#4310-duralade-entity-cancel-func)
+     - 4.3.11. [`duralade entity checkpoint`](#4311-duralade-entity-checkpoint)
+     - 4.3.12. [`duralade entity terminate`](#4312-duralade-entity-terminate)
+     - 4.3.13. [`duralade entity shell`](#4313-duralade-entity-shell)
+     - 4.3.14. [`duralade entity replay`](#4314-duralade-entity-replay)
+     - 4.3.15. [`duralade entity inspect-stack`](#4315-duralade-entity-inspect-stack)
+     - 4.3.16. [`duralade project test`](#4316-duralade-project-test)
    - 4.4. [Debug Operations](#44-debug-operations)
    - 4.5. [Deterministic Execution](#45-deterministic-execution)
    - 4.6. [Blocking and Concurrency](#46-blocking-and-concurrency)
+   - 4.7. [Values and Memory Management](#47-values-and-memory-management)
+   - 4.8. [Runtime Failure Model](#48-runtime-failure-model)
 5. [History and State](#5-history-and-state)
    - 5.1. [Overview](#51-overview)
    - 5.2. [Event Types](#52-event-types)
+   - 5.3. [System Externs and Entity Ref Operations](#53-system-externs-and-entity-ref-operations)
+   - 5.4. [State Store](#54-state-store)
 6. [Debugging](#6-debugging)
 
 ## 1. Overview
@@ -64,24 +72,35 @@
 
 ### 2.2. Project Configuration
 
-1. The `duralade.toml` file is required at the project root.
-   - Single `.dl` files can be run without a project configuration.
-   - Projects are required for dependency management and multi-file organization.
+1. The `duralade.toml` file defines an explicit project.
+   - Projects are required for dependency management and cross-project imports.
+   - When no `duralade.toml` is found, the directory is treated as an **implicit project**:
+     - The project root name is `_` (underscore), a reserved sentinel that cannot appear in import paths.
+     - The source root is the directory itself (equivalent to `source_root = "."`).
+     - All `.dl` files in the directory (and subdirectories) are discovered as modules.
+     - Multi-file modules work the same as in explicit projects.
+     - Entity types omit the root prefix: `--entity money_transfer` resolves to `money_transfer.dl`.
+       Dots translate to subdirectories: `--entity admin.roles` resolves to `admin/roles.dl`.
+     - In persisted events, entity types are stored fully qualified with the `_.` prefix
+       (e.g., `_.money_transfer`). The CLI adds this prefix transparently.
+     - Only stdlib imports are available - `_` cannot be referenced in import statements.
+     - No tests root is configured.
 1. The `[project]` section defines basic project metadata.
    - `name` (required) - The project name, which becomes the root namespace for all modules.
-   - `source_root` (optional) - The directory containing source files, defaults to `{project_name}/`.
-   - `tests_root` (optional) - The directory containing test files, defaults to `tests/`.
+   - `source_root` (optional) - The directory containing source files, defaults to `src/`.
+   - `tests_root` (optional) - The directory containing test files, defaults to `test/`.
    - Example:
      ```toml
      [project]
      name = "my_project"
-     source_root = "src"
-     tests_root = "tests"
      ```
-   - 💭 Why default to project name? Follows Python convention where package name matches directory name, making the
-     structure self-documenting.
    - ❓ Version field TBD - may be derived from git tags instead of explicit toml field.
    - ❓ Multiple source/test roots TBD - should projects support multiple source_root or tests_root directories?
+   - ❓ Implied imports TBD - the stdlib provides a default set of implied imports (currently just `duralade.error`).
+     Projects can opt out with `stdlib_prelude = false`. Open questions:
+     - Should projects be able to define their own additional implied imports?
+     - Is "prelude" the right term, or something like "implied_imports" / "auto_imports"?
+     - If custom implied imports are supported, what's the syntax? (e.g., `implied_imports = ["my_project.common"]`)
 1. The optional `[build]` section specifies how to build native libraries from source.
    - Omit this section if project has no natives and source builds are allowed.
    - `type` (required) - Build system type: `"cargo"`, `"make"`, or `"none"`.
@@ -105,15 +124,15 @@
 
 1. The source root directory contains the project's source files.
    - Source files have the `.dl` extension.
-   - The source root defaults to a directory matching the project name.
-   - Example: For project `my_project`, the default source root is `my_project/`.
+   - The source root defaults to `src/`.
+   - Example: For project `my_project`, source files live in `src/`.
 1. Directory structure within the source root maps directly to module hierarchy.
-   - File `{source_root}/user.dl` defines module `{project_name}.user`.
-   - File `{source_root}/admin/roles.dl` defines module `{project_name}.admin.roles`.
+   - File `src/user.dl` defines module `{project_name}.user`.
+   - File `src/admin/roles.dl` defines module `{project_name}.admin.roles`.
    - Subdirectory nesting creates nested module names.
-1. The tests root directory contains test files in the `tests` module hierarchy.
+1. The tests root directory contains test files in the `test` module hierarchy.
    - Test files are separate from the main project modules.
-   - Example: `tests/user_test.dl` defines module `tests.user_test`.
+   - Example: `test/user_test.dl` defines module `test.user_test`.
    - Tests can only access `out` items from the main project by default.
    - 💭 Why separate modules? Enforces testing through public interfaces and prevents test code from polluting the
      project modules.
@@ -139,7 +158,7 @@
    - Example:
 
      ```
-     @test.internals_visible(modules = ["my_project.internal", "my_project._helper"])
+     @test::internals_visible(modules = ["my_project.internal", "my_project._helper"])
 
      import my_project.internal
      import my_project._helper
@@ -291,8 +310,9 @@ TODO: Write after completing subsections 4.2-4.5.
 1. Core operations control entity execution through CLI commands, HTTP API, and Rust library.
    - All interfaces provide equivalent functionality with similar semantics.
    - This section documents the CLI interface; HTTP and Rust APIs follow the same patterns.
-1. All entity commands accept `--code <source>` to specify the code source.
-   - Code source determines which code version is used for execution.
+1. Most entity commands require `--code <source>` to specify the code source.
+   - Code is needed for any operation that reconstructs an entity instance (spawn, tick, view, complete-extern, invoke-func, cancel, cancel-func, terminate, replay, inspect).
+   - Read-only metadata commands (describe) do not require code.
    - Defaults to `.` (current directory).
    - Supported formats:
      - Local paths: `/path/to/project`, `bundle.dlb`, `script.dl`
@@ -315,9 +335,8 @@ Required:
   --entity <type>        Entity type (module-qualified: my_project.user)
   --id <id>              Entity identifier
 
-State Output:
-  --state <target>       Where to write state (default: <id>.duralade.json)
-  --state-format <fmt>   Format override (default: infer from extension, else json)
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
 
 Behavior:
   --no-tick              Skip initial tick (default: runs tick)
@@ -329,63 +348,54 @@ Input Arguments:
   --in-format <fmt>      Format override (default: infer from file extension, else json)
 ```
 
-1. The spawn operation creates a new entity with a unique identifier.
+1. The spawn operation creates a new entity with a unique identifier in the state store.
 1. The entity type can reference any module in the code source or its dependencies.
    - Example: `my_project.user`, `auth.service`, `workers.processor`
-1. State targets support URI schemes.
-   - `file://` is implied for paths
-   - `stdout://` writes to stdout
-   - `db://` for database storage (future)
-1. Format inference rules for state and input data.
-   - If file extension is present, infer from extension
-   - Otherwise default to JSON
-   - Error if file path provided and format cannot be inferred
 1. Entity arguments must be serializable (primitives, arrays, maps, data types, named function references).
    - Function closures cannot be serialized; entities with closure `in` fields are local-only.
 1. Spawn runs an initial tick by default unless `--no-tick` is specified.
    - See Section 4.2 for entity initialization during first tick
 1. Examples:
    - `duralade entity spawn --entity my_project.user --id user-123 --in '{"name": "Alice"}'`
-   - `duralade entity spawn --entity worker.task --id t1 --code git+https://github.com/org/workers?version=2.0.0 --in-file args.json --no-tick`
-   - `duralade entity spawn --entity service --id svc-1 --code bundle.dlb --state stdout:// --in '{}'`
+   - `duralade entity spawn --entity worker.task --id t1 --state ./workers.json --code git+https://github.com/org/workers?version=2.0.0 --in-file args.json --no-tick`
 
 #### 4.3.3. `duralade entity tick`
 
 ```
 duralade entity tick [OPTIONS]
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --id <id>              Entity to tick (optional - ticks all if omitted)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 ```
 
-1. The tick operation executes the entity until all coroutines yield waiting for external stimulus.
+1. The tick operation executes entities until all coroutines yield waiting for external stimulus.
+1. With `--id`, ticks a single entity. Without `--id`, ticks all entities that can make progress.
+   - Entities may cause other entities to become tickable (e.g., completing an extern that unblocks another entity). Tick without `--id` continues until no more progress can be made, which may tick individual entities multiple times.
 1. Tick follows a three-phase process.
    - Replay: Read event log from state and replay to restore execution state.
    - Execute: Run all Duralade code until every coroutine yields.
    - Persist: Add new events to state and write back.
-1. New events generated during tick include InvokeExternRequest, InvokeFuncComplete, and EntityCompleted.
-   - InvokeExternRequest events indicate side effects the entity needs executed externally.
-   - InvokeFuncComplete events indicate a function invocation has completed.
-   - EntityCompleted event indicates the entity has finished execution.
-1. State is read from and written to the same target unless `--state-out` is specified.
-   - With `--state-out`, the original state file is preserved.
+1. New events generated during tick include DuraladeExternInvoke, DuraladeFuncComplete, and DuraladeEntityComplete.
+1. State is read from and written to the same store unless `--state-out` is specified.
 1. ❓ Mechanism for outputting only new events from tick (not entire state) TBD.
 1. ❓ Deadlock timeout configuration TBD (timeout when all coroutines are blocked waiting on each other).
 1. ❓ Event grouping in state format to track which events came from which tick TBD (see Section 5).
-1. Example: `duralade entity tick --state user-123.duralade.json`
-1. Example: `duralade entity tick --state entities/worker-1.json --state-out stdout://`
+1. Example: `duralade entity tick --id user-123`
+1. Example: `duralade entity tick --state ./workers.json --id worker-1 --state-out stdout://`
 
 #### 4.3.4. `duralade entity describe`
 
 ```
 duralade entity describe [OPTIONS]
 
-State Input:
-  --state <target>       Read state from (required)
-  --state-format <fmt>   Format override
+Required:
+  --id <id>              Entity identifier
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
 
 Display Options:
   --get-out <field>      Include specific out field (can repeat)
@@ -406,14 +416,19 @@ Output:
    - `--get-out <field>` can be repeated for multiple specific fields.
    - `--get-out-all` includes all entity-level `out` fields.
    - If both are specified, `--get-out-all` takes precedence.
-1. Example: `duralade entity describe --state worker-123.json`
-1. Example: `duralade entity describe --state worker-123.json --get-out status --get-out progress`
-1. Example: `duralade entity describe --state worker-123.json --get-out-all --no-result`
+1. Example: `duralade entity describe --id worker-123`
+1. Example: `duralade entity describe --id worker-123 --get-out status --get-out progress`
+1. Example: `duralade entity describe --id worker-123 --get-out-all --no-result`
+1. ❓ Option to show pending externs and funcs (e.g., `--pending`) TBD.
 
 #### 4.3.5. `duralade entity view`
 
 ```
 duralade entity view [OPTIONS]
+
+Required:
+  --code <source>        Code source directory (default: ".")
+  --id <id>              Entity identifier
 
 One of (mutually exclusive):
   --func <name>          View function to invoke
@@ -425,9 +440,11 @@ Input Arguments (only with --func):
   --in-file <path>       Read arguments from file
   --in-format <fmt>      Format override (default: infer from file extension, else json)
 
-State Input:
-  --state <target>       Read state from (required)
-  --state-format <fmt>   Format override
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+
+Optional:
+  --after-event-num <n>  Truncate events to this number before replaying
 
 Output:
   --out <target>         Where to write result (default: stdout://)
@@ -435,12 +452,15 @@ Output:
 ```
 
 1. Read-only command: invokes view function OR reads entity out fields (mutually exclusive).
-1. With `--func`: Executes view function and returns its out fields.
+1. Requires code to replay the entity and evaluate view functions or reconstruct out field values.
+1. With `--func`: Replays entity, then executes view function and returns its out fields.
    - ❓ Support for `--eval` alternative to `--func` for evaluating arbitrary expressions TBD.
-1. With `--field` or `--field-all`: Reads entity out fields without executing code.
+1. With `--field` or `--field-all`: Replays entity and reads entity out fields.
    - Multiple fields returned as data structure; single field returns just the value.
-1. Example: `duralade entity view --func get_status --state worker-123.json`
-1. Example: `duralade entity view --field status --field progress --state worker-123.json`
+1. `--after-event-num` enables time-travel: truncates the event log to events with `num <= n`, then replays. Useful for inspecting entity state at a past point.
+1. Example: `duralade entity view --id worker-123 --func get_status`
+1. Example: `duralade entity view --id worker-123 --field status --field progress`
+1. Example: `duralade entity view --id worker-123 --field-all --after-event-num 5`
 
 #### 4.3.6. `duralade entity invoke-func`
 
@@ -448,12 +468,12 @@ Output:
 duralade entity invoke-func [OPTIONS]
 
 Required:
+  --id <id>              Entity identifier
   --func <name>          Function name to invoke
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 
 Input Arguments:
@@ -462,7 +482,7 @@ Input Arguments:
   --in-format <fmt>      Format override (default: infer from file extension, else json)
 
 Optional:
-  --id <id>              Request identifier (default: auto-generated)
+  --request-id <id>      Request identifier (default: auto-generated)
 ```
 
 1. Adds a DuraladeFuncInvoke event to the entity's state.
@@ -471,9 +491,9 @@ Optional:
 1. Used for spawn-time invocations and external function calls.
    - Spawn-time: `spawn --no-tick`, `invoke-func`, then `tick`.
 1. The tick generates a DuraladeFuncComplete event when the function returns.
-1. Request ID is auto-generated if not provided.
-1. Example: `duralade entity invoke-func --func configure --state w1.json --in '{"mode": "fast"}'`
-1. Example: `duralade entity invoke-func --func process --state worker.json --in-file item.json --id req-123`
+1. Request ID identifies this invocation for later reference (e.g., `cancel-func`). Auto-generated if not provided.
+1. Example: `duralade entity invoke-func --id w1 --func configure --in '{"mode": "fast"}'`
+1. Example: `duralade entity invoke-func --id worker --func process --in-file item.json --request-id req-123`
 
 #### 4.3.7. `duralade entity invoke-func-noblock`
 
@@ -481,12 +501,12 @@ Optional:
 duralade entity invoke-func-noblock [OPTIONS]
 
 Required:
+  --id <id>              Entity identifier
   --func <name>          Noblock function name to invoke
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 
 Input Arguments:
@@ -502,9 +522,8 @@ Output:
 1. Shortcut for `invoke-func` + `tick` for noblock functions.
 1. Adds a DuraladeFuncInvoke event, runs the tick, and returns the function's out fields.
 1. Noblock functions can mutate entity state.
-1. Example: `duralade entity invoke-func-noblock --func update_config --state worker.json --in '{"timeout": 30}'`
-1. Example:
-   `duralade entity invoke-func-noblock --func process --state worker.json --in-file data.json --out result.json`
+1. Example: `duralade entity invoke-func-noblock --id worker --func update_config --in '{"timeout": 30}'`
+1. Example: `duralade entity invoke-func-noblock --id worker --func process --in-file data.json --out result.json`
 
 #### 4.3.8. `duralade entity complete-extern`
 
@@ -512,12 +531,12 @@ Output:
 duralade entity complete-extern [OPTIONS]
 
 Required:
-  --request-event <num>  Event number of the DuraladeExternInvoke to complete
+  --id <id>              Entity identifier
+  --invoke-num <num>     Event number of the DuraladeExternInvoke to complete
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 
 Result Data:
@@ -527,20 +546,21 @@ Result Data:
 ```
 
 1. Adds a DuraladeExternComplete event to the entity's state.
-1. The request event number must reference a DuraladeExternInvoke event from a previous tick.
-1. Format inference follows the same rules as input arguments (see Section 4.3.2).
-1. Example: `duralade entity complete-extern --request-event 42 --state user-1.json --result '{"status": 200}'`
-1. Example: `duralade entity complete-extern --request-event 43 --state worker.json --result-file result.json`
+1. The invoke number must reference a DuraladeExternInvoke event from a previous tick.
+1. Example: `duralade entity complete-extern --id user-1 --invoke-num 42 --result '{"status": 200}'`
+1. Example: `duralade entity complete-extern --id worker --invoke-num 43 --result-file result.json`
 
 #### 4.3.9. `duralade entity cancel`
 
 ```
 duralade entity cancel [OPTIONS]
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+Required:
+  --id <id>              Entity identifier
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 ```
 
@@ -549,19 +569,39 @@ State I/O:
 1. Only one cancel request is allowed per entity.
    - Subsequent cancel requests on the same entity will error.
 1. ❓ Support for cancel reason or message TBD (e.g., `--reason "timeout"`).
-1. ❓ `cancel-func` command TBD - cancel a specific in-flight function invocation by request ID. Note: not all runtimes
-   may support this.
-1. Example: `duralade entity cancel --state worker-123.json`
+1. Example: `duralade entity cancel --id worker-123`
 
-#### 4.3.10. `duralade entity checkpoint`
+#### 4.3.10. `duralade entity cancel-func`
+
+```
+duralade entity cancel-func [OPTIONS]
+
+Required:
+  --id <id>              Entity identifier
+  --request-id <id>      Request ID of the DuraladeFuncInvoke to cancel
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
+  --dry-run              Show what would happen without writing
+```
+
+1. Adds a DuraladeFuncCancel event to the entity's state.
+1. The request ID must reference an in-flight DuraladeFuncInvoke (one without a corresponding DuraladeFuncComplete).
+1. Cancellation is cooperative - the func's code decides how to respond.
+1. Example: `duralade entity cancel-func --id worker --request-id req-123`
+
+#### 4.3.11. `duralade entity checkpoint`
 
 ```
 duralade entity checkpoint [OPTIONS]
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+Required:
+  --id <id>              Entity identifier
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 
 Compaction:
@@ -570,71 +610,156 @@ Compaction:
 
 1. Adds a Checkpoint event capturing current execution state.
 1. By default, removes events that are no longer needed (compaction).
-   - Removes completed invoke pairs (InvokeExternRequest + InvokeExternComplete, InvokeFuncRequest +
-     InvokeFuncComplete).
+   - Removes completed invoke pairs (DuraladeExternInvoke + DuraladeExternComplete, DuraladeFuncInvoke +
+     DuraladeFuncComplete).
    - Keeps incomplete invokes (request without completion).
-   - Keeps other events (CancelRequested, etc.).
+   - Keeps other events (DuraladeEntityCancel, etc.).
 1. With `--no-compact`, preserves all event history.
-1. Example: `duralade entity checkpoint --state worker-123.json`
-1. Example: `duralade entity checkpoint --state worker-123.json --no-compact`
+1. Example: `duralade entity checkpoint --id worker-123`
+1. Example: `duralade entity checkpoint --id worker-123 --no-compact`
 
-#### 4.3.11. `duralade entity terminate`
+#### 4.3.12. `duralade entity terminate`
 
 ```
 duralade entity terminate [OPTIONS]
 
-State I/O:
-  --state <target>       Read/write state (required)
-  --state-out <target>   Write to different target
-  --state-format <fmt>   Format override
+Required:
+  --id <id>              Entity identifier
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+  --state-out <uri>      Write to different store
   --dry-run              Show what would happen without writing
 ```
 
-1. Adds an EntityCompleted event marking the entity as terminated.
+1. Adds a DuraladeEntityComplete event marking the entity as terminated.
 1. Forces the entity into completed state without running any code.
    - Does not execute defer blocks or cleanup code.
    - Does not produce `run` function out fields.
 1. Used for operator intervention or emergency stops.
 1. ❓ Support for termination reason or message TBD (e.g., `--reason "manual stop"`).
-1. Example: `duralade entity terminate --state worker-123.json`
+1. Example: `duralade entity terminate --id worker-123`
 
-#### 4.3.12. `duralade entity shell`
+#### 4.3.13. `duralade entity shell`
 
 ```
 duralade entity shell [OPTIONS]
 
-State Input:
-  --state <target>       Entity state to load (required)
-  --state-format <fmt>   Format override
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
 
 Persistence:
   --no-auto-persist      Defer writes, use explicit `persist` command
   --read-only            Prevent any state modifications
 ```
 
-1. The shell operation opens an interactive session with an entity's state loaded in memory.
+1. The shell operation opens an interactive session with the state store loaded in memory.
    - 💭 Why? Avoids repeated state deserialization, enabling fast iteration during development and debugging.
 1. All entity commands from Section 4.3 are available without the `duralade entity` prefix.
    - The `--state` parameter is omitted since state is already loaded.
-   - Example: `tick` instead of `duralade entity tick --state file.json`
-   - Example: `invoke-view --func get_status` instead of
-     `duralade entity invoke-view --func get_status --state file.json`
+   - Example: `tick --id worker-123` instead of `duralade entity tick --id worker-123`
+   - Example: `view --id worker-123 --func get_status`
 1. Shell-specific commands are available.
-   - `reload` - Re-read state from the original file, discarding in-memory changes.
-   - `persist` - Explicitly save state to file (when `--no-auto-persist` is enabled).
+   - `reload` - Re-read state from the store, discarding in-memory changes.
+   - `persist` - Explicitly save state (when `--no-auto-persist` is enabled).
    - `exit` or `quit` - Exit the shell session.
 1. By default, state is persisted after each mutation.
    - Use `--no-auto-persist` to defer writes and use explicit `persist` commands.
    - `--read-only` prevents any state modifications.
 1. ❓ Shell interface improvements TBD (command history, tab completion, syntax highlighting, TUI mode with richer
    interaction).
-1. ❓ Integration with spawn TBD (`spawn --shell` to immediately enter shell, possibly without requiring initial state
-   file).
-1. Example: `duralade entity shell --state worker-123.json`
+1. ❓ Integration with spawn TBD (`spawn --shell` to immediately enter shell).
+1. Example: `duralade entity shell --state ./workers.json`
+
+#### 4.3.14. `duralade entity replay`
+
+```
+duralade entity replay [OPTIONS]
+
+Required:
+  --code <source>        Code source directory (default: ".")
+  --id <id>              Entity identifier
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+```
+
+1. Diagnostic, read-only command: replays an entity from its event log without persisting anything.
+1. Confirms the entity can replay without faulting under the current code.
+   - Useful after code changes to verify existing entities are still compatible.
+1. Prints the replay outcome: "replay ok: entity completed" or "replay ok: entity blocked".
+1. If replay produces a fault, the command fails with the fault message.
+1. Example: `duralade entity replay --id worker-123`
+
+#### 4.3.15. `duralade entity inspect-stack`
+
+```
+duralade entity inspect-stack [OPTIONS]
+
+Required:
+  --code <source>        Code source directory (default: ".")
+  --id <id>              Entity identifier
+
+State:
+  --state <uri>          State store (default: ./duralade-state.json)
+
+Optional:
+  --after-event-num <n>  Truncate events to this number before replaying
+
+Output:
+  --out <target>         Where to write result (default: stdout://)
+  --out-format <fmt>     Format for result (default: json)
+```
+
+1. Diagnostic, read-only command: replays entity and displays the call stack of each active coroutine.
+1. Output is a JSON object with:
+   - `last_event_num`: the highest event number in the replayed log.
+   - `coroutines`: array of coroutine info objects, each with:
+     - `id`: coroutine identifier.
+     - `source_event`: event number of the FuncInvoke that created this coroutine (null for the run coroutine).
+     - `stack`: array of resolved stack frames, bottom-to-top. Each frame has:
+       - `module`: fully qualified module path (e.g. `myapp.worker`).
+       - `construct`: declaration name (e.g. `worker`).
+       - `member`: member name if inside a member function (omitted otherwise).
+       - `file`: source file path (omitted if unavailable).
+       - `line`: 1-indexed line number of the call site (omitted if unavailable).
+1. `--after-event-num` enables inspecting stacks at a past point in the event log.
+1. Example: `duralade entity inspect-stack --id worker-123`
+
+#### 4.3.16. `duralade project test`
+
+```
+duralade project test [OPTIONS] [FILTER]
+
+Options:
+  --code <source>        Code source directory (default: ".")
+
+Arguments:
+  [FILTER]               Only run tests whose qualified name contains this substring
+```
+
+1. Discovers and runs all `@test` functions in the project's test modules.
+   - Test modules are loaded from the project's tests root (default: `test/`).
+   - Each `@test` function runs as an isolated entity in a fresh in-memory state store.
+   - Tests that complete normally pass; tests that early-return via `!` fail with the error message.
+1. The optional filter argument selects tests by qualified name substring.
+   - Qualified names follow the format `{root}.{module_segments}::{func_name}`.
+   - Example: `duralade project test spawn` runs all tests containing "spawn" in their qualified name.
+1. Output streams test results as they complete.
+   - Each test prints its qualified name, PASS/FAIL status, and duration.
+   - A summary line reports total passed, failed, and skipped counts.
+   - The command exits with a non-zero code if any tests fail.
+1. Example: `duralade project test --code ./my_project`
+1. Example: `duralade project test --code ./my_project user_test`
 
 ### 4.4. Debug Operations
 
-TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
+1. The primary debugging tools are replay-based: replay the entity from its event log with current code, then inspect.
+   - `replay` (§4.3.14) confirms an entity can replay without faulting.
+   - `view` (§4.3.5) with `--after-event-num` enables time-travel inspection of out fields and view functions.
+   - `inspect-stack` (§4.3.15) shows call stacks of active coroutines at any point in the event log.
+1. All debug operations are read-only - they do not modify the state store.
+1. TODO: Interactive debugging (breakpoints, stepping, expression evaluation).
 
 ### 4.5. Deterministic Execution
 
@@ -655,16 +780,86 @@ TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
    operations are available on them (.id, .cancel(), .terminate()?), how does blocking work, what's the difference
    between local entities and spawned entities
 
+### 4.7. Values and Memory Management
+
+1. All values behave as references from the user's perspective.
+   - Assignment copies the reference, not the data: `b := a` makes both refer to the same value.
+   - 💭 Why? Consistent mental model - no value vs reference distinction. Works like JavaScript.
+1. Immutable types (`int`, `float`, `bool`, `nil`, `str`) may be implemented as copy-by-value.
+   - Since they cannot be mutated, reference vs copy is indistinguishable to the user.
+   - Strings may use copy-on-write or interning internally.
+1. Mutable types (`data`, `list`, `map`, function closures) are shared by reference.
+   - Mutations are visible through all references to the same value.
+1. Entity references hold an identifier, not inline state. Entity state lives in a separate runtime store.
+1. Non-primitive values live on a value heap. Variables hold small handles (value IDs) into the heap.
+   - The heap is serialized at checkpoints. Loaded modules (ASTs, types) are static and NOT serialized per tick.
+1. Memory is managed via reference counting with type-directed cycle detection.
+   - Refcount reaches zero → immediate free.
+   - Cycles are possible (e.g., `data Node { :node? }` referencing itself).
+   - At load time, the type checker computes which types are **cycle-capable** - those whose field graph can transitively reference back to themselves.
+   - Only cycle-capable values are tracked as **suspects** when their refcount decreases but doesn't reach zero.
+   - Cycle collection (trial deletion) runs at tick boundaries, scoped to suspects only.
+   - 💭 Why type-directed? Most types can't form cycles, so the suspects set is typically empty. Cycle detection is effectively free for most programs.
+1. GC is invisible to user code. No finalizers or weak references. `defer` runs at scope exit, not GC time.
+
+### 4.8. Runtime Failure Model
+
+Three categories of runtime conditions:
+
+#### Errors (user-reactable)
+
+1. Errors are values via `out!` fields - normal control flow, entity continues executing.
+1. Every foreseeable condition must be expressible as an error. If user code cannot react to a foreseeable condition,
+   that is a language design bug.
+
+#### Faults
+
+1. A **fault** halts entity execution due to an environmental or data mismatch.
+   - Extern result validation failure (missing required field, extra field, wrong type).
+   - Replay divergence (code changed, recorded events don't match new execution path).
+   - Missing non-nilable implicit (no `implicitly` binding in call chain).
+   - Deserialization failure (stored value doesn't match expected type shape).
+1. No in-language catch/recover mechanism. The `out!` path handles expected errors; faults represent unanticipated
+   conditions. The durable execution model provides a better recovery path than in-code recovery: fix code or data,
+   re-tick.
+1. A fault is a **tick result, not entity state**. No new events are persisted on fault. The event log is unchanged,
+   the entity remains "running" in the store, and re-ticking replays from scratch. Faults are idempotent - same code
+   and event log produce the same fault.
+   - 💭 Why not record faults in the event log? The event log records what happened - invocations, completions, spawn.
+     A fault is what *didn't* happen: execution could not proceed. Recording it would require a "clear fault" operation
+     before re-ticking, couple the log format to error reporting, and add schema complexity for something that belongs
+     in operational telemetry (CLI output, dashboards, monitoring).
+1. Tick result carries structured fault information (category, message, source location, execution trace).
+   - ❓ Exact `FaultInfo` structure TBD.
+
+#### Fault recovery
+
+1. Recovery = fix inputs (code and/or event log), then re-tick.
+1. **Code surgery**: fix the code, re-tick. Entity replays from event log with updated code. Primary and safest path.
+1. **Event log surgery**: edit events, re-tick. Fix malformed extern results, remove divergence-causing events, correct
+   bad values. Powerful but dangerous - the event log format is intentionally simple to make manual editing feasible.
+1. Faults at different points after a fix are expected - iterate until the entity makes it through.
+
+#### Internal errors
+
+1. An **internal error** is a bug in the Duralade compiler or runtime - conditions that should be impossible if
+   parser/loader/type-checker are correct (e.g., type mismatch at runtime, undefined variable, dangling heap ref).
+1. Also halts the entity, but the message indicates a compiler bug, not a user-fixable problem.
+1. Distinct error type from faults in the tick result so tooling can differentiate.
+
 ## 5. History and State
 
 ### 5.1. Overview
 
-1. Entity state is an append-only event log.
+1. A **state store** holds all entities for a deployment. Entities within a store can reference each other via entity refs.
+   - The store is the unit of scope - spawn creates entities in the same store.
+   - The CLI uses `--state <uri>` to identify the store, `--id <entity_id>` to target a specific entity within it.
+1. Each entity's state is an append-only event log.
    - The current execution state is derived by replaying all events in order.
    - Each tick appends new events to the log.
    - 💭 Why event log? Provides complete history for time-travel debugging, deterministic replay, and auditability.
 1. Events serialize to multiple formats, with JSON as the default.
-   - Format inferred from file extension or specified via `--state-format`.
+   - Format inferred from file extension or provided as a query parameter on the URI (e.g., `?format=json`). Default is JSON.
    - Fields marked `user_payload` can be encoded via `--codec` for encryption, compression, or other transformations
      (see Section 1).
 1. Event schemas use Duralade type notation with primitive types (`int`, `str`, `bool`, `bytes`, `array[t]`,
@@ -677,8 +872,8 @@ TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
 ### 5.2. Event Types
 
 1. Common fields present in all events:
-   - `event_type: str` - Event type identifier (e.g., "DuraladeEntityCancel").
-   - `event_num: int` - Monotonically increasing event number (may have gaps).
+   - `type: str` - Event type identifier (e.g., "DuraladeEntityCancel").
+   - `num: int` - Monotonically increasing event number (may have gaps).
    - `time: int` - Milliseconds since Unix epoch (UTC).
 1. The first event in the log must be either `DuraladeEntityInvoke` or `DuraladeEntityCheckpoint`.
 1. Event types defined in this section:
@@ -696,20 +891,76 @@ TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
      - `entity: str` - Fully qualified entity type name (e.g., "my_project.user").
      - `args: user_payload[map[str, any]]` - Entity constructor arguments (in/inout fields).
    - `DuraladeExternComplete` - Extern invocation completed. **Written by user.**
-     - `request_event_num: int` - References the event_num of the DuraladeExternInvoke.
+     - `invoke_num: int` - References the num of the DuraladeExternInvoke.
      - `result: user_payload[map[str, any]]` - Extern function's out fields.
    - `DuraladeExternInvoke` - Extern invocation requested by Duralade code. **Written by Duralade.**
-     - `extern: str` - Name of the extern function being invoked.
+     - `extern: str` - Fully qualified extern name: `<dot-delimited-module>::<extern>` (e.g., `my_project.payments::charge`, `duralade.entity::spawn`).
      - `args: user_payload[map[str, any]]` - Extern function's in/inout fields.
    - `DuraladePatchSelect` - Patch version selected during execution. **Written by Duralade.**
      - `version: str` - Qualified identifier of the selected patch version (e.g., "my_feature.v2").
    - `DuraladeFuncComplete` - Function invocation completed. **Written by Duralade.**
-     - `request_event_num: int` - References the event_num of the DuraladeFuncInvoke.
+     - `invoke_num: int` - References the num of the DuraladeFuncInvoke.
      - `result: user_payload[map[str, any]]` - Function's out fields.
+   - `DuraladeFuncCancel` - Function invocation cancelled. **Written by user.**
+     - `invoke_num: int` - References the num of the DuraladeFuncInvoke.
+     - `reason: str?` - Optional reason for cancellation.
    - `DuraladeFuncInvoke` - Function invocation requested. **Written by user.**
      - `id: str?` - Optional user-provided identifier for this function invocation.
      - `func: str` - Name of the function to invoke.
      - `args: user_payload[map[str, any]]` - Function's in/inout fields.
+
+### 5.3. System Externs and Entity Ref Operations
+
+1. System externs are extern invocations handled by the runtime rather than user code.
+   - All system externs use the `duralade.*::` namespace (e.g., `duralade.entity::spawn`, `duralade.time::sleep`).
+   - The interpreter treats them identically to user externs - ExternInvoke yields, ExternComplete resumes.
+   - 💭 Why model as externs? Avoids new execution primitives. Event logs stay uniform.
+1. Entity ref operations use the `duralade.entity::` namespace. From each entity's perspective, cross-entity interactions are externs (outbound) or funcs (inbound). The runtime routes between entities.
+1. Entity ref API - operations available on an entity reference (`&T`):
+   - `ref->func(args)` - call a member function. See `duralade.entity::call` below.
+   - `ref->field` - read a field. See `duralade.entity::read` below.
+   - `ref.result()` - wait for the entity's `run` to complete and return its result. See `duralade.entity::result` below.
+   - `ref.cancel(reason?)` - request cooperative cancellation. See `duralade.entity::cancel` below.
+   - `ref.terminate()` - force termination. See `duralade.entity::terminate` below.
+   - `ref.id` - the entity instance identifier (`str`). Local, no extern.
+   - ❓ `ref->*` - read all `out` fields at once. TBD.
+   - ❓ `ref.domain` - the execution domain/location of the entity. Needed for serialization of entity refs (id + domain are sufficient to reconstruct a ref). Semantics and naming TBD.
+1. `duralade.entity::spawn` - create an independent entity.
+   - Caller: ExternInvoke `{ entity, id?, ... }` → ExternComplete `{ entity: &ref?, error? }`
+   - Target: receives `DuraladeEntityInvoke` as its first event.
+1. `duralade.entity::result` - wait for a spawned entity's `run` to complete.
+   - Caller: ExternInvoke `{ entity_ref }` → ExternComplete `{ value?, error? }`
+   - Target: FuncInvoke `{ func: "duralade.entity::result", args: { entity_ref } }` → FuncComplete `{ result }`
+   - Only one `result` func is in flight on the target per entity ref - multiple waiters share it.
+   - Once received, the result is memoized on the entity ref instance. Subsequent calls return it without a new extern or func.
+   - If the target is already done when called, completes immediately without a FuncInvoke on the target.
+   - The system cancels the `result` func when no references to the entity remain on the caller side. Requires a general func cancellation concept (see below).
+   - ❓ Atomic spawn + result: callers may want to spawn and immediately wait. The entity_ref may not exist yet at that point. Need to decide if this is a combined operation or syntactic sugar over two sequential externs.
+1. `duralade.entity::call` - member function call (`ref->method(args)`).
+   - Caller: ExternInvoke `{ entity_ref, func, args }` → ExternComplete `{ result }`
+   - Target: receives `DuraladeFuncInvoke` and produces `DuraladeFuncComplete` only for non-view funcs. View funcs execute without events.
+1. `duralade.entity::read` - field read (`ref->field`).
+   - Caller: ExternInvoke `{ entity_ref, field }` → ExternComplete `{ value }`
+   - ❓ Whether field reads produce events on the target TBD (likely no).
+1. `duralade.entity::cancel` - cooperative cancellation.
+   - Caller: ExternInvoke `{ entity_ref, reason? }` → ExternComplete `{}`
+   - Target: receives `DuraladeEntityCancel`.
+   - Completes immediately - does not wait for target to stop.
+   - ❓ Whether cancel should be noblock (no extern/yield) TBD.
+1. `duralade.entity::terminate` - force termination.
+   - Caller: ExternInvoke `{ entity_ref }` → ExternComplete `{}`
+   - Target: receives `DuraladeEntityComplete { terminated: true }`.
+   - Completes immediately.
+   - ❓ Whether terminate should be noblock (no extern/yield) TBD.
+
+### 5.4. State Store
+
+1. The state store holds all entities for a deployment as a collection of entity event logs.
+   - CLI: `--state <uri>` identifies the store, `--id <entity_id>` targets an entity within it.
+   - URI: `./state.json` (implicit `file://`), `file:///path/to/state.json`, or database URIs (future).
+1. **File backend** - a single file, top-level object keyed by entity ID, each value is an array of events.
+   - Format inferred from file extension. Default is JSON. Override via query param (`?format=...`).
+1. ❓ Database backend TBD.
 
 ## 6. Debugging
 

@@ -1,0 +1,13 @@
+# Map literal type inference
+
+func check_int_str_map {
+    m := { 1 = "one", 2 = "two" }
+    m
+    ^ @@TYPE: duralade.map::map[k = duralade.int::int, v = duralade.str::str]
+}
+
+func check_str_int_map {
+    m := { "a" = 1, "b" = 2 }
+    m
+    ^ @@TYPE: duralade.map::map[k = duralade.str::str, v = duralade.int::int]
+}

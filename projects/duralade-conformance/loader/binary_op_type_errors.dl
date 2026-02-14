@@ -1,0 +1,31 @@
+# Binary operator type mismatch errors
+
+func add_bool_int {
+    x := true + 1
+         ^^^^^^^^ @@ERROR: cannot apply '+' to bool and int
+}
+
+func add_int_str {
+    x := 10 + "foo"
+         ^^^^^^^^^^ @@ERROR: cannot apply '+' to int and str
+}
+
+func and_int_bool {
+    x := 1 && true
+         ^^^^^^^^^ @@ERROR: cannot apply '&&' to int and bool
+}
+
+func negate_str {
+    x := -"hello"
+         ^^^^^^^^ @@ERROR: cannot apply '-' to str
+}
+
+func not_int {
+    x := !10
+         ^^^ @@ERROR: cannot apply '!' to int
+}
+
+func sub_str_str {
+    x := "a" - "b"
+         ^^^^^^^^^ @@ERROR: cannot apply '-' to str and str
+}

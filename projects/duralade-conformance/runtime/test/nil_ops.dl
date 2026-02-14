@@ -1,0 +1,39 @@
+# TODO: nilable field access (.field? syntax)
+# TODO: if-let nilable binding (if x := expr?)
+
+import duralade.assert
+import duralade.test
+
+@test
+func nil_coalesce_with_nil {
+    out! :error?
+
+    var x: int?
+    assert::equal(actual = x ?? 10, expected = 10)!
+}
+
+@test
+func nil_coalesce_with_value {
+    out! :error?
+
+    x := 42
+    assert::equal(actual = x ?? 10, expected = 42)!
+}
+
+@test
+func nil_equality {
+    out! :error?
+
+    var x: int?
+    assert::equal(actual = x == nil, expected = true)!
+    assert::equal(actual = x != nil, expected = false)!
+}
+
+@test
+func non_nil_check {
+    out! :error?
+
+    x := 42
+    assert::equal(actual = x == nil, expected = false)!
+    assert::equal(actual = x != nil, expected = true)!
+}

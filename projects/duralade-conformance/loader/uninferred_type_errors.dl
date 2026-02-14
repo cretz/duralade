@@ -1,0 +1,52 @@
+# Errors: literals whose types cannot be inferred without an explicit annotation,
+# and mixed-type collection literals
+
+func empty_array_field {
+    out items = []
+                ^^ @@ERROR: cannot infer element type of empty array, add a type annotation
+}
+
+func empty_array_var {
+    x := []
+         ^^ @@ERROR: cannot infer element type of empty array, add a type annotation
+}
+
+func empty_map_field {
+    out items = { }
+                ^^^ @@ERROR: cannot infer key/value types of empty map, add a type annotation
+}
+
+func empty_map_var {
+    x := { }
+         ^^^ @@ERROR: cannot infer key/value types of empty map, add a type annotation
+}
+
+func mixed_array {
+    x := [1, "hello"]
+             ^^^^^^^ @@ERROR: array element type mismatch: expected int, got str
+}
+
+func mixed_map_keys {
+    x := { 1 = "a", "b" = "c" }
+                    ^^^ @@ERROR: map key type mismatch: expected int, got str
+}
+
+func mixed_map_values {
+    x := { "a" = 1, "b" = "hello" }
+                          ^^^^^^^ @@ERROR: map value type mismatch: expected int, got str
+}
+
+func nil_field {
+    out result = nil
+                 ^^^ @@ERROR: cannot infer type of 'nil', add a type annotation
+}
+
+func nil_var {
+    x := nil
+         ^^^ @@ERROR: cannot infer type of 'nil', add a type annotation
+}
+
+func non_nilable_var_no_init {
+    var x: int
+        ^^^^^^ @@ERROR: non-nilable variable 'x' must have an initializer
+}

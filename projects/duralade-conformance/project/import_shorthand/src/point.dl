@@ -1,0 +1,4 @@
+out data point {
+    x: int
+    y: int
+}

@@ -1,0 +1,41 @@
+func break_space_after_colon {
+    for {
+        break: foo
+             ^^ @@STRICT: No space allowed after ':' in label
+    }
+}
+
+func break_space_before_colon {
+    for {
+        break :foo
+             ^^ @@STRICT: No space allowed before ':' in label
+    }
+}
+
+func continue_space_after_colon {
+    for {
+        continue: foo
+                ^^ @@STRICT: No space allowed after ':' in label
+    }
+}
+
+func continue_space_before_colon {
+    for {
+        continue :foo
+                ^^ @@STRICT: No space allowed before ':' in label
+    }
+}
+
+func for_space_after_colon {
+    for: outer {
+       ^^ @@STRICT: No space allowed after ':' in label
+        break
+    }
+}
+
+func for_space_before_colon {
+    for :outer {
+       ^^ @@STRICT: No space allowed before ':' in label
+        break
+    }
+}

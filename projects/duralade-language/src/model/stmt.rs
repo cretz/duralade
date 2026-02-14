@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{Expr, ExprInvocation, Ident, InvalidNode, NodeId, Type};
+use super::{Expr, Ident, InvalidNode, NodeId, Type};
 
 /// Spec 9 - statement
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -169,12 +169,12 @@ pub struct StmtForCondition {
     pub expr: Expr,
 }
 
-/// Spec 9.5 - for_clause (in form). Expression must be an invocation.
+/// Spec 9.5 - for_clause (in form). Expression evaluates to an iter func.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StmtForIn {
     pub node_id: NodeId,
     pub var: Ident,
-    pub invocation: ExprInvocation,
+    pub expr: Expr,
 }
 
 /// Spec 9.5 - for_break

@@ -1,0 +1,12 @@
+func explicit_nil_into_required_should_error {
+    takes_required(s = nil)
+                       ^^^ @@ERROR: argument 's' type mismatch: cannot assign nil to non-nilable type str
+}
+
+func returns_nilable {
+    out s: str? = "ok"
+}
+
+func takes_required {
+    in s: str
+}

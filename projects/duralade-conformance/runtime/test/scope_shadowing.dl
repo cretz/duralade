@@ -1,0 +1,55 @@
+import duralade.assert
+import duralade.iter
+import duralade.test
+
+@test
+func block_shadows_var {
+    out! :error?
+
+    x := 1
+    if true {
+        x := 2
+        assert::equal(actual = x, expected = 2)!
+    }
+    assert::equal(actual = x, expected = 1)!
+}
+
+@test
+func closure_param_shadows_var {
+    out! :error?
+
+    x := 10
+    f := func {
+        in x: int
+        out value = x
+    }
+    assert::equal(actual = f(x = 99).value, expected = 99)!
+    assert::equal(actual = x, expected = 10)!
+}
+
+@test
+func for_body_var_does_not_leak {
+    out! :error?
+
+    sum := 0
+    for i in iter::range(end = 3) {
+        sum = sum + i
+    }
+    assert::equal(actual = sum, expected = 3)!
+}
+
+@test
+func nested_block_shadow_chain {
+    out! :error?
+
+    x := 1
+    if true {
+        x := 2
+        if true {
+            x := 3
+            assert::equal(actual = x, expected = 3)!
+        }
+        assert::equal(actual = x, expected = 2)!
+    }
+    assert::equal(actual = x, expected = 1)!
+}

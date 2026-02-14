@@ -1,0 +1,19 @@
+import duralade.assert
+import duralade.error
+import duralade.test
+
+@test
+func fail_default_message {
+    out! :error?
+
+    result := assert::fail()
+    assert::equal(actual = result.error.message, expected = "failure")!
+}
+
+@test
+func fail_returns_error {
+    out! :error?
+
+    result := assert::fail(message = "boom")
+    assert::equal(actual = result.error.message, expected = "boom")!
+}

@@ -1,0 +1,137 @@
+import duralade.assert
+import duralade.test
+
+@test
+func anon_data_with_out_early {
+    out! :error?
+
+    r := anon_data_with_out_early_helper()
+    assert::equal(actual = r.error != nil, expected = true)!
+    assert::equal(actual = r.error.message, expected = "anon fail")!
+}
+
+func anon_data_with_out_early_helper {
+    out! :error?
+
+    data { out! error = error::simple(message = "anon fail") }!
+}
+
+@test
+func bang_nil_continues {
+    out! :error?
+
+    result := bang_nil_continues_helper()!
+    assert::equal(actual = result.value, expected = 42)!
+}
+
+func bang_nil_continues_helper {
+    out value = 42
+    out! :error?
+}
+
+@test
+func bang_non_nil_propagates {
+    out! :error?
+
+    r := bang_non_nil_propagates_helper()
+    assert::equal(actual = r.error != nil, expected = true)!
+    assert::equal(actual = r.error.message, expected = "inner fail")!
+}
+
+func bang_non_nil_propagates_helper {
+    out! :error?
+
+    bang_non_nil_propagates_inner()!
+}
+
+func bang_non_nil_propagates_inner {
+    out! :error?
+
+    return! error::simple(message = "inner fail")
+}
+
+@test
+func nested_bang_propagation {
+    out! :error?
+
+    r := nested_bang_propagation_outer()
+    assert::equal(actual = r.error != nil, expected = true)!
+    assert::equal(actual = r.error.message, expected = "deep")!
+}
+
+func nested_bang_propagation_deep {
+    out! :error?
+
+    return! error::simple(message = "deep")
+}
+
+func nested_bang_propagation_middle {
+    out! :error?
+
+    nested_bang_propagation_deep()!
+}
+
+func nested_bang_propagation_outer {
+    out! :error?
+
+    nested_bang_propagation_middle()!
+}
+
+@test
+func return_collects_out_fields {
+    out! :error?
+
+    r := return_collects_out_fields_helper()
+    assert::equal(actual = r.x, expected = 10)!
+    assert::equal(actual = r.y, expected = 20)!
+}
+
+func return_collects_out_fields_helper {
+    out x = 0
+    out y = 0
+
+    x = 10
+    y = 20
+    return
+}
+
+@test
+func return_early_sets_out_early {
+    out! :error?
+
+    r := return_early_sets_out_early_helper()
+    assert::equal(actual = r.error != nil, expected = true)!
+    assert::equal(actual = r.error.message, expected = "early")!
+}
+
+func return_early_sets_out_early_helper {
+    out value = 0
+    out! :error?
+
+    return! error::simple(message = "early")
+    value = 99
+}
+
+@test
+func return_early_skips_remaining {
+    out! :error?
+
+    r := return_early_sets_out_early_helper()
+    assert::equal(actual = r.value, expected = 0)!
+}
+
+@test
+func return_without_setting_out_uses_defaults {
+    out! :error?
+
+    r := return_without_setting_out_uses_defaults_helper()
+    assert::equal(actual = r.value, expected = 0)!
+    assert::equal(actual = r.name, expected = "default")!
+}
+
+func return_without_setting_out_uses_defaults_helper {
+    out name = "default"
+    out value = 0
+
+    return
+}

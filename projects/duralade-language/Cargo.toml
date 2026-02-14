@@ -4,7 +4,9 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-serde = { version = "1.0", features = ["derive"] }
+indexmap = "2"
+serde = { version = "1.0", features = ["derive", "rc"] }
+tracing = "0.1"
 
 [dev-dependencies]
 # test dependencies later

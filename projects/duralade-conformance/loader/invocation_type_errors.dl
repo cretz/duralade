@@ -1,0 +1,28 @@
+func bad_call {
+    expects_str(s = 123)
+                    ^^^ @@ERROR: argument 's' type mismatch: expected str, got int
+}
+
+func bad_call_expr_arg {
+    expects_str(s = 1 + 2)
+                    ^^^^^ @@ERROR: argument 's' type mismatch: expected str, got int
+}
+
+func bad_call_first_arg {
+    expects_int_bool(count = "nope", ok = true)
+                             ^^^^^^ @@ERROR: argument 'count' type mismatch: expected int, got str
+}
+
+func bad_call_second_arg {
+    expects_int_bool(count = 1, ok = 2)
+                                     ^ @@ERROR: argument 'ok' type mismatch: expected bool, got int
+}
+
+func expects_int_bool {
+    in count: int
+    in ok: bool
+}
+
+func expects_str {
+    in s: str
+}

@@ -1,0 +1,155 @@
+import duralade.array
+import duralade.assert
+import duralade.error
+import duralade.int
+import duralade.iter
+import duralade.test
+
+@test
+func from_iter_collects_range {
+    out! :error?
+
+    result := array::from_iter(iter::range(end = 5).iter).result
+    assert::equal(actual = result.len().result, expected = 5)!
+    assert::equal(actual = result.get(index = 0).result, expected = 0)!
+    assert::equal(actual = result.get(index = 4).result, expected = 4)!
+}
+
+@test
+func from_iter_empty {
+    out! :error?
+
+    result := array::from_iter(iter::range(end = 0).iter).result
+    assert::equal(actual = result.len().result, expected = 0)!
+}
+
+@test
+func from_iter_from_array_iter {
+    out! :error?
+
+    source := [10, 20, 30]
+    copy := array::from_iter(source.iter).result
+    assert::equal(actual = copy.len().result, expected = 3)!
+    assert::equal(actual = copy.get(index = 0).result, expected = 10)!
+    assert::equal(actual = copy.get(index = 2).result, expected = 30)!
+}
+
+@test
+func get_out_of_bounds {
+    out! :error?
+
+    arr := [10, 20, 30]
+    assert::equal(actual = arr.get(index = -1).result, expected = nil)!
+    assert::equal(actual = arr.get(index = 3).result, expected = nil)!
+}
+
+@test
+func get_valid {
+    out! :error?
+
+    arr := [10, 20, 30]
+    assert::equal(actual = arr.get(index = 0).result, expected = 10)!
+    assert::equal(actual = arr.get(index = 2).result, expected = 30)!
+}
+
+@test
+func iter_basic {
+    out! :error?
+
+    arr := [10, 20, 30]
+    sum := 0
+    for v in arr.iter {
+        sum += v
+    }
+    assert::equal(actual = sum, expected = 60)!
+}
+
+@test
+func iter_break {
+    out! :error?
+
+    arr := [1, 2, 3, 4, 5]
+    sum := 0
+    for v in arr.iter {
+        if v == 4 {
+            break
+        }
+        sum += v
+    }
+    # 1 + 2 + 3 = 6
+    assert::equal(actual = sum, expected = 6)!
+}
+
+@test
+func iter_empty {
+    out! :error?
+
+    var arr: array[t = int] = []
+    count := 0
+    for v in arr.iter {
+        count += 1
+    }
+    assert::equal(actual = count, expected = 0)!
+}
+
+@test
+func len {
+    out! :error?
+
+    arr := [1, 2, 3]
+    assert::equal(actual = arr.len().result, expected = 3)!
+
+    var empty: array[t = int] = []
+    assert::equal(actual = empty.len().result, expected = 0)!
+}
+
+@test
+func push_appends {
+    out! :error?
+
+    arr := [1, 2]
+    arr.push(value = 3)
+    assert::equal(actual = arr.len().result, expected = 3)!
+    assert::equal(actual = arr.get(index = 2).result, expected = 3)!
+}
+
+@test
+func push_to_empty {
+    out! :error?
+
+    var arr: array[t = int] = []
+    arr.push(value = 42)
+    assert::equal(actual = arr.len().result, expected = 1)!
+    assert::equal(actual = arr.get(index = 0).result, expected = 42)!
+}
+
+@test
+func remove {
+    out! :error?
+
+    arr := [10, 20, 30]
+    removed := arr.remove(index = 1).result
+    assert::equal(actual = removed, expected = 20)!
+    assert::equal(actual = arr.len().result, expected = 2)!
+    assert::equal(actual = arr.get(index = 0).result, expected = 10)!
+    assert::equal(actual = arr.get(index = 1).result, expected = 30)!
+}
+
+@test
+func remove_out_of_bounds {
+    out! :error?
+
+    arr := [10, 20]
+    removed := arr.remove(index = 5).result
+    assert::equal(actual = removed, expected = nil)!
+}
+
+@test
+func set {
+    out! :error?
+
+    arr := [10, 20, 30]
+    old := arr.set(index = 1, value = 99).old_value
+    assert::equal(actual = old, expected = 20)!
+    assert::equal(actual = arr.get(index = 1).result, expected = 99)!
+}

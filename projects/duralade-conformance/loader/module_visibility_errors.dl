@@ -1,0 +1,21 @@
+import loader.helpers.visibility
+
+func call_nonexistent_cross_module {
+    visibility::nonexistent()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: 'nonexistent' not found in 'visibility'
+}
+
+func call_private_cross_module_data {
+    visibility::private_data(x = 1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: 'private_data' in 'visibility' is not out (private)
+}
+
+func call_private_cross_module_entity {
+    visibility::private_entity(x = 1)
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: 'private_entity' in 'visibility' is not out (private)
+}
+
+func call_private_cross_module_func {
+    visibility::private_func()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: 'private_func' in 'visibility' is not out (private)
+}

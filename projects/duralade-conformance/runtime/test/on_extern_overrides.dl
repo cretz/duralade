@@ -1,0 +1,86 @@
+import duralade.assert
+import duralade.test
+
+# TODO: when assert.contains exists, assert error message substrings here.
+
+func local_func {
+    out value = 1
+}
+
+@test
+func on_extern_happy_path_override_invoked {
+    out! :error?
+    implicit :test::context
+
+    called := false
+    context.on_extern(
+        extern = "test.on_extern_overrides::fetch_value",
+        handler = func {
+            in id: str
+            out value: int
+            out! :error?
+
+            called = true
+            assert::equal(actual = id, expected = "abc")!
+            value = 41
+        },
+    )!
+
+    r := fetch_value(id = "abc")
+    assert::equal(actual = r.value, expected = 41)!
+    assert::equal(actual = called, expected = true)!
+}
+
+@test
+func on_extern_rejects_non_extern_target {
+    out! :error?
+    implicit :test::context
+
+    r := context.on_extern(
+        extern = "test.on_extern_overrides::local_func",
+        handler = func {},
+    )
+
+    assert::equal(actual = r.error != nil, expected = true)!
+    assert::equal(
+        actual = r.error.message,
+        expected = "override target 'test.on_extern_overrides::local_func' is not an extern",
+    )!
+}
+
+@test
+func on_extern_rejects_signature_mismatch {
+    out! :error?
+    implicit :test::context
+
+    r := context.on_extern(extern = "test.on_extern_overrides::fetch_value", handler = func {
+        in wrong_id: str
+        out value: int
+        value = 1
+    })
+
+    assert::equal(actual = r.error != nil, expected = true)!
+}
+
+@test
+func on_extern_rejects_unknown_target {
+    out! :error?
+    implicit :test::context
+
+    r := context.on_extern(
+        extern = "test.on_extern_overrides::missing_extern",
+        handler = func {
+            in id: str
+            out value: int
+            value = 1
+        },
+    )
+
+    assert::equal(actual = r.error != nil, expected = true)!
+}
+
+extern fetch_value {
+    in id: str
+    out value: int
+    out! :error?
+}

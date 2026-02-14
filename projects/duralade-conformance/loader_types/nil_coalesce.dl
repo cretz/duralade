@@ -1,0 +1,22 @@
+# Type inference for nil coalesce (??)
+
+func nil_coalesce_non_nilable_passthrough {
+    in x: int
+
+    a := x ?? 0
+         ^^^^^^ @@TYPE: duralade.int::int
+}
+
+func nil_coalesce_str {
+    in x: str?
+
+    a := x ?? "default"
+         ^^^^^^^^^^^^^^ @@TYPE: duralade.str::str
+}
+
+func nil_coalesce_strips_nilable {
+    in x: int?
+
+    a := x ?? 0
+         ^^^^^^ @@TYPE: duralade.int::int
+}

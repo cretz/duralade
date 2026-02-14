@@ -1,0 +1,58 @@
+# Advanced type inference through chained field defaults and invocations
+
+data pair {
+    a: int
+    b: int
+}
+
+# Func whose out default comes from another func's out
+func get_base {
+    out val = 42
+}
+
+# Out default inferred from invocation + field access
+func get_derived {
+    out result = get_base().val
+}
+
+# Three-level chain: inner -> middle -> outer
+func get_inner {
+    out n = 10
+}
+
+func get_middle {
+    out n = get_inner().n
+}
+
+func get_outer {
+    out n = get_middle().n
+}
+
+# Out default from a data constructor field
+func get_pair_a {
+    out result = pair(a = 1, b = 2).a
+}
+
+# Test that all the chain results resolve correctly
+func test_chain {
+    a := get_base().val
+         ^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+    b := get_derived().result
+         ^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+    c := get_pair_a().result
+         ^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+    d := get_outer().n
+         ^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+# Field default from sibling field on same func
+func test_sibling_defaults {
+    in x: int
+    in y = x
+    out sum = x + y
+}
+
+func test_sibling_result {
+    a := test_sibling_defaults(x = 5).sum
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}

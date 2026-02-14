@@ -1,0 +1,17 @@
+# Narrowing type errors
+
+func as_narrowing_else_type_mismatch {
+    in x: int?
+    out! :error?
+
+    y := x as int else! "not an error"
+                        ^^^^^^^^^^^^^^ @@ERROR: else! expression type str is not assignable to out! type error?
+}
+
+func nil_narrowing_else_type_mismatch {
+    in x: int?
+    out! :error?
+
+    y := x? else! "not an error"
+                  ^^^^^^^^^^^^^^ @@ERROR: else! expression type str is not assignable to out! type error?
+}

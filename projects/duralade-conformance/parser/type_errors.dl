@@ -10,6 +10,11 @@ func entity_ref_missing_type {
             ^ @@ERROR: Expected identifier
 }
 
+func redundant_type_arg_name {
+    var a: name[t = t]
+                ^^^^^ @@STRICT: Redundant type argument name 't', use shorthand form
+}
+
 func type_arg_missing_bracket {
     var a: name[int
                ^ @@ERROR: Expected ']'

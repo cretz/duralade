@@ -1,0 +1,7 @@
+import duralade.float as int
+import duralade.int
+^^^^^^^^^^^^^^^^^^^ @@ERROR: Duplicate import alias 'int'
+
+import duralade.str
+import duralade.str
+^^^^^^^^^^^^^^^^^^^ @@ERROR: Duplicate import alias 'str'

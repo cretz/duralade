@@ -1,0 +1,137 @@
+# Generic type argument inference from argument types
+
+data box {
+    intype t
+    value: t
+}
+
+data container {
+    intype t
+    value: t
+
+    out func get_value {
+        out result = value
+    }
+}
+
+data nested_box {
+    intype t
+    inner: box[t]
+}
+
+data pair {
+    intype k
+    intype v
+    key: k
+    value: v
+}
+
+data wrapper {
+    intype t
+    label: str
+    value: t
+}
+
+# Mirrors shopping cart pattern: entity with map, member func using from_iter in field default
+entity item_store {
+    value items: map[k = str, v = int] = { }
+
+    # Field default — works (no function body statement)
+    out view func get_all {
+        out result = array::from_iter(iter = items.values_iter).result
+    }
+
+    # Statement referencing parent field — should also work
+    out func get_all_stmt {
+        copied := array::from_iter(iter = items.values_iter).result
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.array::array[t = duralade.int::int]
+    }
+}
+
+func explicit_still_works {
+    b := box[t = int](value = 42)
+         ^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::box[t = duralade.int::int]
+}
+
+func generic_from_func {
+    intype t
+    in cb: func { out result: t }
+    out result = cb().result
+}
+
+func generic_identity {
+    intype t
+    in value: t
+    out result = value
+}
+
+func generic_pair_maker {
+    intype k
+    intype v
+    in key: k
+    in value: v
+    out result = pair(key, value)
+}
+
+func generic_with_default {
+    intype t
+    in value: t
+    in label = "default"
+    out result = wrapper(value, label)
+}
+
+# Infer from data constructor - single type param
+func infer_data_int {
+    b := box(value = 42)
+         ^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::box[t = duralade.int::int]
+}
+
+func infer_data_str {
+    b := box(value = "hello")
+         ^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::box[t = duralade.str::str]
+}
+
+# Infer from member func ref on generic data
+func infer_from_member_func_ref {
+    c := container[t = int](value = 42)
+    r := generic_from_func(cb = c.get_value).result
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+# Infer from generic func call - single type param
+func infer_func_identity {
+    r := generic_identity(value = 42).result
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: duralade.int::int
+}
+
+# Infer from generic func call - multiple type params
+func infer_func_pair {
+    r := generic_pair_maker(key = "x", value = 1.0).result
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::pair[k = duralade.str::str, v = duralade.float::float]
+}
+
+# Infer from member func ref in field default
+func infer_member_ref_in_default {
+    intype t
+    in c: container[t]
+    out result = generic_from_func(cb = c.get_value).result
+}
+
+# Infer from data constructor - multiple type params
+func infer_multiple {
+    p := pair(key = "name", value = 42)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::pair[k = duralade.str::str, v = duralade.int::int]
+}
+
+# Infer through nested generic - argument is box[t = int], infer t = int
+func infer_nested {
+    b := box(value = 42)
+    n := nested_box(inner = b)
+         ^^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::nested_box[t = duralade.int::int]
+}
+
+# Infer with non-generic field that has default
+func infer_with_default_field {
+    r := generic_with_default(value = 42).result
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@TYPE: loader_test.generic_inference::wrapper[t = duralade.int::int]
+}

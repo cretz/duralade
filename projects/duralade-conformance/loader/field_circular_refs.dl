@@ -1,0 +1,18 @@
+func indirect_through_anon_func {
+    out x = func { out result = y }()
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@ERROR: Circular field default references among: x, y
+    out y = x
+}
+
+func mutual_cycle {
+    out a = b
+    ^^^^^^^^^ @@ERROR: Circular field default references among: a, b
+    out b = a
+}
+
+func three_way_cycle {
+    out a = b
+    ^^^^^^^^^ @@ERROR: Circular field default references among: a, b, c
+    out b = c
+    out c = a
+}

@@ -1,0 +1,36 @@
+# TODO: `!` on expr that doesn't have an out! field (compound but no out!)
+# TODO: at least one of the above using an anonymous data type return
+
+func bang_on_non_compound {
+    out! :error?
+
+    nil!
+       ^ @@ERROR: '!' requires a compound type with an out! field
+}
+
+func might_fail {
+    out! :error?
+
+    error::fail(message = "oops")!
+}
+
+func no_early_out {
+    out result: int?
+
+    might_fail()!
+                ^ @@ERROR: cannot use '!' without an out! field
+}
+
+func return_early_without_out_early {
+    out result: int?
+
+    return! error::simple(message = "oops")
+    ^^^^^^^ @@ERROR: cannot use 'return!' without an out! field
+}
+
+func wrong_out_early_type {
+    out! :int?
+
+    might_fail()!
+                ^ @@ERROR: '!' out! type mismatch: expected int, got error?
+}

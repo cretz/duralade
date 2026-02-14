@@ -1,5 +1,10 @@
-# Test: data body with member funcs (func disambiguation)
+# Test: data fields don't have modifiers
+data bad_modifier {
+    in x: int
+    ^^ @@ERROR: Data fields don't have modifiers (remove 'in')
+}
 
+# Test: data body with member funcs (func disambiguation)
 data with_funcs {
     name: string
 

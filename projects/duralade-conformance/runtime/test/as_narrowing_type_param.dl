@@ -1,0 +1,322 @@
+import duralade.assert
+import duralade.test
+
+# Data with type param — member func uses `as t` to narrow
+data box {
+    intype t
+    value: any
+
+    out func try_get {
+        out result: t?
+        out! :error?
+
+        if val := value as t {
+            result = val
+        }
+    }
+}
+
+# Type arg forwarded: member func passes its type arg to another construct
+data box_factory {
+    intype t
+    value: any
+
+    # Forwards t to box[t] and narrows via box's try_get
+    out func try_via_box {
+        out result: t?
+        out! :error?
+
+        b := box[t](value)
+        r := b.try_get()!
+        result = r.result
+    }
+}
+
+# if-as form with type param
+data checker {
+    intype t
+    value: any
+
+    out func check {
+        out result: bool
+        out! :error?
+
+        if val := value as t {
+            result = true
+        } else {
+            result = false
+        }
+    }
+}
+
+# Type param `t` on inner — used by outer_wrapper to prove construct isolation
+data inner_box {
+    intype t
+    value: any
+
+    out func try_get {
+        out result: t?
+        out! :error?
+
+        if val := value as t {
+            result = val
+        }
+    }
+}
+
+# Nested: anon func inside member func uses type param from outer construct
+data outer_box {
+    intype t
+    value: any
+
+    out func try_get_via_anon {
+        out result: t?
+        out! :error?
+
+        helper := func {
+            in x: any
+            out result: t?
+            out! :error?
+
+            if val := x as t {
+                result = val
+            }
+        }
+        r := helper(x = value)!
+        result = r.result
+    }
+}
+
+# Calls inner_box[t = str].try_get even though outer t = int — proves isolation
+data outer_wrapper {
+    intype t
+    value: any
+
+    out func try_get_inner_str {
+        out result: str?
+        out! :error?
+
+        ib := inner_box[t = str](value)
+        r := ib.try_get()!
+        result = r.result
+    }
+}
+
+# Member func's intype t shadows the parent data's intype t
+data parent_box {
+    intype t
+    value: any
+
+    # Member func has its own intype t — shadows parent's t
+    out func try_get_as {
+        intype t
+        in value2: any
+        out result: t?
+        out! :error?
+
+        # This `as t` should use the member func's t, not the parent's
+        if val := value2 as t {
+            result = val
+        }
+    }
+}
+
+# as else! form with type param
+data safe_box {
+    intype t
+    value: any
+
+    out func get_or_error {
+        out result: t
+        out! :error?
+
+        result = value as t else! error::simple(message = "wrong type")
+    }
+}
+
+# Type param named `int` shadows the builtin type `int`
+data shadow_builtin {
+    intype int
+    value: any
+
+    out func try_get {
+        out result: int?
+        out! :error?
+
+        if val := value as int {
+            result = val
+        }
+    }
+}
+
+# as! bang form with type param
+data strict_box {
+    intype t
+    value: any
+
+    out func get {
+        out result: t
+        out! :error?
+
+        result = value as! t
+    }
+}
+
+@test
+func as_type_param_anon_func_matches {
+    out! :error?
+
+    b := outer_box[t = str](value = "hello")
+    r := b.try_get_via_anon()!
+    assert::equal(actual = r.result, expected = "hello")!
+}
+
+@test
+func as_type_param_anon_func_rejects {
+    out! :error?
+
+    b := outer_box[t = str](value = 42)
+    r := b.try_get_via_anon()!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func as_type_param_bang_fails {
+    out! :error?
+
+    b := strict_box[t = int](value = "nope")
+    r := b.get()
+    assert::equal(actual = r.error.message, expected = "type narrowing: value does not match expected type")!
+}
+
+@test
+func as_type_param_bang_succeeds {
+    out! :error?
+
+    b := strict_box[t = int](value = 10)
+    r := b.get()!
+    assert::equal(actual = r.result, expected = 10)!
+}
+
+@test
+func as_type_param_else_fails {
+    out! :error?
+
+    b := safe_box[t = int](value = "nope")
+    r := b.get_or_error()
+    assert::equal(actual = r.error.message, expected = "wrong type")!
+}
+
+@test
+func as_type_param_else_succeeds {
+    out! :error?
+
+    b := safe_box[t = int](value = 7)
+    r := b.get_or_error()!
+    assert::equal(actual = r.result, expected = 7)!
+}
+
+# Type arg forwarded to another construct — factory passes t to box
+@test
+func as_type_param_forwarded_matches {
+    out! :error?
+
+    f := box_factory[t = int](value = 42)
+    r := f.try_via_box()!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+@test
+func as_type_param_forwarded_rejects {
+    out! :error?
+
+    f := box_factory[t = int](value = "hello")
+    r := f.try_via_box()!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+# Inner box t = str used inside outer_wrapper whose t = int — proves isolation
+@test
+func as_type_param_inner_construct_isolated {
+    out! :error?
+
+    w := outer_wrapper[t = int](value = "hello")
+    r := w.try_get_inner_str()!
+    assert::equal(actual = r.result, expected = "hello")!
+}
+
+# Shadow: inner t = str wins over outer t = int — string matches
+@test
+func as_type_param_inner_shadows_outer {
+    out! :error?
+
+    p := parent_box[t = int](value = "ignored")
+    r := p.try_get_as[t = str](value2 = "hello")!
+    assert::equal(actual = r.result, expected = "hello")!
+}
+
+# Shadow: inner t = str wins over outer t = int — int rejects
+@test
+func as_type_param_inner_shadows_outer_rejects {
+    out! :error?
+
+    p := parent_box[t = int](value = "ignored")
+    r := p.try_get_as[t = str](value2 = 42)!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func as_type_param_matches {
+    out! :error?
+
+    b := box[t = int](value = 42)
+    r := b.try_get()!
+    assert::equal(actual = r.result, expected = 42)!
+}
+
+@test
+func as_type_param_rejects {
+    out! :error?
+
+    b := box[t = int](value = "hello")
+    r := b.try_get()!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+# Shadow: type param named `int` = str — string matches even though `int` is a builtin
+@test
+func as_type_param_shadows_builtin {
+    out! :error?
+
+    s := shadow_builtin[int = str](value = "hello")
+    r := s.try_get()!
+    assert::equal(actual = r.result, expected = "hello")!
+}
+
+# Shadow: type param named `int` = str — actual int rejects
+@test
+func as_type_param_shadows_builtin_rejects {
+    out! :error?
+
+    s := shadow_builtin[int = str](value = 42)
+    r := s.try_get()!
+    assert::equal(actual = r.result, expected = nil)!
+}
+
+@test
+func if_as_type_param_enters_else {
+    out! :error?
+
+    c := checker[t = int](value = "hello")
+    r := c.check()!
+    assert::equal(actual = r.result, expected = false)!
+}
+
+@test
+func if_as_type_param_enters_then {
+    out! :error?
+
+    c := checker[t = int](value = 42)
+    r := c.check()!
+    assert::equal(actual = r.result, expected = true)!
+}

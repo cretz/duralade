@@ -1,0 +1,8 @@
+# Nil coalesce type errors
+
+func nil_coalesce_type_mismatch {
+    in x: int?
+
+    y := x ?? "not int"
+              ^^^^^^^^^ @@ERROR: ?? fallback type str is not assignable to int
+}

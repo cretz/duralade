@@ -12,6 +12,7 @@
    - 6.2. [Modules](#62-modules)
    - 6.3. [Imports](#63-imports)
    - 6.4. [Annotations](#64-annotations)
+   - 6.5. [Builtins](#65-builtins)
 7. [Types](#7-types)
    - 7.1. [Overview](#71-overview)
    - 7.2. [Generics](#72-generics)
@@ -45,7 +46,8 @@
     - 10.6. [Invocation](#106-invocation)
     - 10.7. [Literals](#107-literals)
     - 10.8. [Wait](#108-wait)
-    - 10.9. [Anonymous Functions and Data](#109-anonymous-functions-and-data)
+    - 10.9. [Spawn](#109-spawn)
+    - 10.10. [Anonymous Functions and Data](#1010-anonymous-functions-and-data)
 
 ## 1. Language Overview
 
@@ -172,6 +174,7 @@ identifier_qualified = identifier { "." identifier } .
    - 💭 Why limit to lowercase and underscores? Identifiers are not meant to support arbitrary casing. This enforces
      consistent naming across all Duralade code. In situations where name customization is required (e.g., JSON field
      names), explicit conversion functions should be used rather than relying on identifier names.
+1. 🔒 Alphabetical ordering of identifiers uses ASCII order, except underscores sort after all other characters (e.g., `foo` < `foo_bar` < `_foo`).
 1. Raw identifiers are enclosed in backticks.
    - The backticks are delimiters, not part of the identifier itself.
    - Raw identifiers can contain any Unicode characters, including backticks, newlines, and non-printable characters.
@@ -183,9 +186,9 @@ identifier_qualified = identifier { "." identifier } .
    - Keywords are context-specific and determined by the grammar.
    - What is a keyword in one context (e.g., `entity` where a construct is expected) may be a valid identifier in
      another context (e.g., as a variable name).
-1. Qualified identifiers consist of identifiers separated by `.`.
-   - Used for accessing items from other modules.
-   - Example: `my_module.user`
+1. Import paths consist of identifiers separated by `.`.
+   - Used in import declarations to specify module paths.
+   - Example: `import my.long.module`
 
 ## 6. Source Files and Modules
 
@@ -207,15 +210,26 @@ source_file = { annotation } { import } { file_construct } .
 
 ### 6.2. Modules
 
+```wirth
+module_access = identifier "::" identifier_qualified .
+```
+
 1. Each source file defines or contributes to a module.
    - The module name is derived from the filename: the portion before the first dot (excluding the `.dl` extension).
    - Multiple files can contribute to the same module by sharing the same prefix.
    - Example: `user.dl`, `user.admin.dl`, and `user.types.dl` all contribute to the `user` module.
    - Further details on module organization and resolution are defined in the runtime specification.
+1. Items from an imported module are accessed using `::` (the module access operator).
+   - Example: `error::fail(msg)`, `time::sleep(duration)`, `:time::duration?`
+   - This applies in both type position and expression position.
+   - `.` (dot) is used exclusively for field and method access on values.
+   - 💭 Why `::` instead of `.`? Using separate operators for module access (`::`) and value access (`.`) eliminates
+     ambiguity when a local variable shadows a module alias (e.g., `out! :error?` creating a local `error` that shadows
+     the `error` module).
 1. A construct with the same name as the module can be accessed using just the module name when imported (shorthand
    form).
    - Example: If module `user` contains `out data user { ... }`, then importing `user` allows accessing the data type as
-     just `user` instead of `user.user`.
+     just `user` instead of `user::user`.
    - This applies to `entity`, `data`, or `func` constructs.
    - ❓ Should the shorthand form also apply to type aliases?
 
@@ -226,14 +240,14 @@ import_alias = "as" identifier .
 import = "import" identifier_qualified [ import_alias ] .
 ```
 
-1. Imports begin with the `import` keyword followed by a qualified module identifier.
+1. Imports begin with the `import` keyword followed by a dot-separated module path.
 1. Imports can be aliased with the `as` keyword.
    - Example: `import my.long.module as m`
    - The alias becomes the name used to access items from that module.
-1. Without an alias, the rightmost identifier in the qualified name is used to access the module.
-   - Example: `import my.long.module` makes items accessible as `module.thing`
-1. All items from an imported module must be accessed with qualification (Go-style).
-   - Example: `module.user`, `m.process`
+1. Without an alias, the rightmost identifier in the path is used as the module alias.
+   - Example: `import my.long.module` makes items accessible as `module::thing`
+1. All items from an imported module must be accessed with `::` qualification (Go-style).
+   - Example: `module::user`, `m::process`
    - Exception: The shorthand form described in Section 6.2 allows unqualified access for module-named constructs.
 1. 🔒 Import declarations must be in alphabetical order by the module path (the qualified identifier after `import`,
    before any `as` clause).
@@ -257,6 +271,11 @@ annotation = "@" invocation .
 1. Annotation arguments must be compile-time constant.
    - Only literals and calls to top-level `view` functions are allowed.
 
+### 6.5. Builtins
+
+1. The standard library uses the `builtin` keyword on `data`, `entity`, and their member functions for runtime-provided
+   implementations. Requires `allow_builtin = true` in `duralade.toml`. Not available to user code.
+
 ## 7. Types
 
 ### 7.1. Overview
@@ -264,13 +283,14 @@ annotation = "@" invocation .
 ```wirth
 type_argument = identifier [ "=" type ] .
 type_arguments = "[" type_argument { "," type_argument } [ "," ] "]" .
-type_named = identifier_qualified [ type_arguments ] .
+type_named = ( module_access | identifier_qualified ) [ type_arguments ] .
 type = (type_named | type_entity_ref | type_introspection | type_anonymous) [ "?" ] .
 ```
 
 1. Types are referenced by identifier.
    - Simple: `int`, `user`
-   - Qualified: `my_module.user`
+   - Qualified: `my_module::user`
+   - Member access: `my_module::my_entity.my_func` (e.g., for `@typeout`)
 1. Types can be nilable by appending `?`.
    - Non-nilable types cannot hold `nil`.
    - Nilable types (with `?`) can hold `nil` or a value of the base type.
@@ -280,11 +300,23 @@ type = (type_named | type_entity_ref | type_introspection | type_anonymous) [ "?
    - `float` - 64-bit IEEE 754 floating-point type (without NaN or Infinity).
    - `str` - UTF-8 string type.
    - `bool` - Boolean type.
-   - `any` - Top type. All non-nilable types are assignable to `any`. All types are assignable to `any?`.
+   - `any` - Top serializable type. All non-nilable serializable types are assignable to `any`.
+   - `anylocal` - Top type including non-serializable types (`func`, `entity`). All non-nilable types are assignable
+     to `anylocal`.
    - Additional semantics and representation details are defined in the runtime specification.
-   - 💭 Why are these "built-in"? These types are defined similarly to stdlib data types but are available without
-     imports and have literal syntax for construction.
+   - 💭 Why separate `any` and `anylocal`? `any` is the safe default for most code. `anylocal` explicitly opts in to
+     non-serializable values that cannot cross serialization boundaries.
    - ❓ Should Duralade support union types (e.g., `int | str | bool`)?
+1. Serializability.
+   - Serializable types: `int`, `float`, `str`, `bool`, `nil`, entity references (`&`), and data whose fields are all
+     transitively serializable.
+   - Non-serializable types: `func`, `entity`.
+   - Generic data serializability depends on type arguments: `array[t = int]` is serializable, `array[t = func]` is not.
+   - The type checker enforces serializability at serialization boundaries (see Sections 7.3, 8.7).
+1. Inferred types must be concrete.
+   - `nil`, `[]`, and `{ }` require explicit type annotations (`int?`, `array[t = int]`, `map[k = str, v = int]`).
+   - Collection literals with mixed element types (e.g. `[1, "hello"]`) are errors - use `array[t = any]` explicitly.
+   - Uniform literals infer normally: `[1, 2, 3]` infers as `array[t = int]`.
 
 ### 7.2. Generics
 
@@ -297,10 +329,14 @@ type = (type_named | type_entity_ref | type_introspection | type_anonymous) [ "?
    - 🔒 When an identifier or access expression matches the type parameter name, the shorthand form must be used.
 1. Type parameters are declared using `intype` (see Section 8.2).
    - Supported in entities, data, functions, externs, and natives.
+1. Type parameter constraints control which types are accepted (see Section 8.2 for full rules).
+   - `intype t` - constrained to serializable types (`any`).
+   - `intype t: anylocal` - accepts any type including non-serializable (`func`, `entity`).
 1. Type arguments may be omitted when the type parameter has a default expression (see Section 8.2).
    - When omitted, the default expression is evaluated to determine the type argument.
+1. Type arguments without defaults are inferred from argument types when omitted.
+   - Unresolved type parameters after inference are errors.
 1. Explicit type arguments must be assignable to the type parameter's constraint.
-   - ❓ Constraint assignability rules TBD.
    - ❓ Variance rules TBD.
 
 ### 7.3. Entity References
@@ -315,6 +351,7 @@ type_entity_ref = "&" type .
    - Entity references are returned by the `spawn` builtin (see runtime specification).
 1. Entity reference fields and methods are accessed using the `->` operator (see Section 10.1).
    - The `->` operator performs blocking calls to the referenced entity.
+   - All arguments and results of `->` calls must be serializable types (see Section 7.1).
    - Example: `entity_ref->method()` blocks while calling the method, `entity_ref->field` blocks while reading the
      field.
    - 💭 Why a different operator? The `->` operator makes blocking/remote calls immediately visible in the code.
@@ -344,7 +381,7 @@ type_introspection = type_named ("@type" | "@typein" | "@typeout") .
    - Invoking an entity or function returns an instance of its `@typeout` type.
    - Example: `my_func@typeout` returns an anonymous type with the function's output fields.
    - ❓ Notation for referencing an entity's `run` function's out type TBD. Current candidate: `e.run@typeout` where `e`
-     is an entity value. Needed for stdlib `entity.run_result` and similar operations.
+     is an entity value. Needed for stdlib `entity::run_result` and similar operations.
 1. Type introspection can be used at runtime for type comparisons.
    - Types are first-class values of the builtin `type` type.
    - Example: `if x := value as some_value@type {`
@@ -380,7 +417,7 @@ type_anonymous = ("data" | ([ "view" | "noblock" ] "func") | "entity") "{" { typ
    - Example: `data { result: str, out! :error? }` is a valid anonymous data type.
 1. Anonymous types can be used anywhere a type can be used.
    - Type annotations, function parameters, return types, constraints, etc.
-   - Anonymous type literals and expressions are specified in Section 10.9.
+   - Anonymous type literals and expressions are specified in Section 10.10.
 
 ## 8. Constructs
 
@@ -437,19 +474,20 @@ field = { annotation } (field_intype | field_var) .
    - `out!` fields must be nilable types.
    - `out!` fields cannot have default expressions.
 1. Type parameter fields (`intype`) consist of an identifier, optional constraint, and optional default type.
-   - Type parameters without constraints are implicitly constrained to `any?`.
-   - Type parameters without defaults must be provided explicitly at call sites (see Section 7.2).
+   - Type parameters without constraints are implicitly constrained to `any?` (serializable types only).
+   - The constraint `anylocal` allows non-serializable types (`func`, `entity`) as type arguments.
+   - Type parameters without defaults are inferred from arguments or provided explicitly (see Section 7.2).
    - When a default expression is present without an explicit constraint, the constraint is implicitly the same as the
      default.
-   - Example: `intype t` - requires explicit type argument, constraint is `any?`.
-   - Example: `intype t: constraint` - requires explicit type argument satisfying constraint.
+   - Example: `intype t` - requires explicit type argument, constraint is `any?` (serializable).
+   - Example: `intype t: anylocal` - accepts any type including non-serializable.
    - Example: `intype t = int` - defaults to `int`, explicit arguments must be assignable to `int`.
-   - Example: `intype t: constraint = int` - defaults to `int`, explicit arguments must satisfy constraint.
+   - Example: `intype t: anylocal = int` - defaults to `int`, accepts any type.
    - Example: `intype t = item@type` - derives type from `item` field, explicit arguments must be assignable to
      `item@type`.
    - 💭 Why implicit constraint from default? This ensures that explicit type arguments are assignable to the default
      type, maintaining type safety.
-   - ❓ Constraint assignability rules and variance are TBD.
+   - ❓ Additional constraint types and variance are TBD.
 1. Other fields (`in`, `out`, `out!`, `inout`, `value`, `implicit`) require a field signature.
 1. Field signatures can omit the identifier if it matches the type name.
    - Example: `in :user` is shorthand for `in user: user`
@@ -470,6 +508,12 @@ field = { annotation } (field_intype | field_var) .
    - Only one implicit value per type can exist at any point in execution.
    - Defining an `implicit` field shadows any outer implicit of the same type.
    - Field names are for local reference; types are used for lookup.
+   - Implicit field types must be concrete named types. Anonymous types, duck types, and `any` are not allowed.
+   - Lookup matches by the base (non-nilable) named type against the implicit context stack (see Section 9.8).
+   - `implicit :foo?` (nilable): if no matching implicit is in the context, the field receives nil. If a matching
+     implicit is found with a nil value, the field receives nil.
+   - `implicit :foo` (non-nilable): if no matching implicit is in the context and no default is provided, this is a
+     runtime error. If a matching implicit is found but the value is nil, this is also a runtime error.
 1. Field default expressions must not have side effects.
    - Allowed: literals, references to other fields, view function calls, data/entity construction.
    - Not allowed: non-view function calls, extern calls, statements.
@@ -488,6 +532,7 @@ field = { annotation } (field_intype | field_var) .
    - `implicit` fields, alphabetically by name.
    - `value` fields, alphabetically by name.
    - ❓ Primary `in` field TBD - would allow `doc("text")` instead of `doc(summary = "text")`.
+1. When no more meaningful name exists, use `value` for the primary `in`/`inout` field and `result` for the primary `out` field. In practice, `result` is more commonly needed since input fields tend to have naturally descriptive names.
 
 ### 8.3. Type Aliases
 
@@ -512,7 +557,7 @@ data_body = { field_signature } { func } .
 data = [ data_modifier ] "data" identifier "{" data_body "}" .
 ```
 
-1. Data represents serializable structures.
+1. Data represents value-type structures.
 1. Data is declared with the `data` keyword followed by a name and body.
 1. The `out` modifier (see Section 8.1) makes data visible outside the module.
 1. Data fields do not use field modifiers.
@@ -521,15 +566,17 @@ data = [ data_modifier ] "data" identifier "{" data_body "}" .
 1. Default expression rules for data fields follow the `inout` rules from Section 8.2.
    - No default means required parameter.
    - Nilable fields must have explicit `= nil` for optional parameters.
-1. All data fields must be serializable types.
+1. Data serializability is transitive (see Section 7.1).
+   - A data type is serializable when all its fields are transitively serializable.
+   - Data with non-serializable fields (e.g., `func`, `entity`, or generic data parameterized with non-serializable
+     types) is itself non-serializable and cannot be used at serialization boundaries.
    - 🔒 Data fields must be in alphabetical order by name.
-   - ❓ Which types are serializable? TBD (likely in runtime spec).
 1. Data can have member functions (see Section 8.6).
    - All member functions in data are implicitly `noblock`.
    - Member functions can have `out` visibility and `view` runtime modifiers (but not explicit `noblock` since it's
      implied).
    - Member functions can access the data's fields directly.
-   - 💭 Why these restrictions? Data is designed for serializable structures and simple helpers (field manipulation,
+   - 💭 Why these restrictions? Data is designed for value-type structures and simple helpers (field manipulation,
      computed properties, maintaining invariants). Complex behavior, long-running operations, or side effects belong in
      entities or free functions.
    - ❓ Equality and hashing semantics for data instances are TBD.
@@ -573,13 +620,14 @@ entity = [ entity_modifier ] "entity" identifier "{" entity_body "}" .
 1. Entities can have member functions (see Section 8.6).
    - Member functions can have `out` visibility and `view`/`noblock` runtime modifiers.
    - Member functions can access the entity's fields directly.
+1. Entities can be constructed locally via normal invocation (like data construction).
+   - Entities with `run` cannot be constructed locally - they must use `spawn`.
+1. Entities can be created via `spawn` (see Section 10.9), which returns an entity reference.
+   - ❓ Whether entities with `run` should ever support local construction TBD.
 1. Entity lifecycle and usage semantics have open design questions.
-   - ❓ Local entity construction vs `spawn` builtin for detached/remote entities.
-   - ❓ Entity references (entity_ref) and how they differ from local entity instances.
-   - ❓ Whether entities with `run` can be constructed locally or require spawn.
-   - ❓ Cancellation and termination semantics for local vs spawned entities.
-   - ❓ Remote execution semantics (is spawn always local, optionally remote, or runtime-determined?).
+   - ❓ Cancellation and termination semantics for spawned entities.
    - ❓ Garbage collection behavior for entities with background `run` coroutines.
+   - ❓ Remote execution semantics - see Section 10.9.
 
 ### 8.6. Functions
 
@@ -614,6 +662,7 @@ native = "native" ( "view" | "noblock" ) identifier "{" { field } "}" .
 1. Externs and native functions are external function declarations implemented outside Duralade.
 1. `extern` declares blocking, side-effecting, non-deterministic operations.
    - Results are memoized by the runtime for deterministic replay.
+   - All `in`, `inout`, `out`, and `out!` fields must be serializable types (see Section 7.1).
    - Cannot be called from `view` or `noblock` contexts.
    - Common use cases: HTTP requests, database operations, file I/O, network calls, external API interactions.
 1. `native` declares deterministic implementations provided outside Duralade.
@@ -623,7 +672,17 @@ native = "native" ( "view" | "noblock" ) identifier "{" { field } "}" .
      operations.
    - 💭 Why dangerous? The language cannot verify native function behavior. Non-deterministic behavior or constraint
      violations break determinism.
-1. Both support field modifiers `intype`, `in`, `inout`, `out`, and `out!` (see Section 8.2).
+1. `extern` and `native` support field modifiers `intype`, `in`, `inout`, `out`, and `out!` (see Section 8.2).
+   - `implicit` and `value` fields are not allowed.
+1. For `extern` and `native`, `out` fields must not declare default expressions.
+   - Output values are produced by the host implementation, not by declaration defaults.
+   - Non-nilable `out` fields must be explicitly set by the host result.
+   - 💭 Why? This avoids ambiguity about whether an output came from host behavior or a declaration fallback, which keeps
+     replay and diagnostics deterministic and easier to reason about.
+1. Native host invocations may use an asynchronous host API.
+1. Host-side native failures map to the runtime error model:
+   - Environment/data mismatch or handler-level failures are faults.
+   - Runtime/engine bugs are internal errors.
 1. Neither `extern` nor `native` can be marked `out`; both are always module-private.
 1. Implementation mechanisms are defined in the runtime specification.
 
@@ -690,7 +749,9 @@ assignment = expression { "," expression } assignment_op expression { "," expres
 1. The `var` keyword uses `field_signature` syntax from Section 8.2.
    - Example: `var count: int = 0`
    - Example: `var count = 0` (type inferred)
-   - Example: `var user: user?` (nilable, implicitly defaults to `= nil`)
+   - Example: `var :int?` (shorthand for `var int: int?`, nilable, implicitly defaults to `nil`)
+   - Example: `var :array[t = int] = []` (shorthand for `var array: array[t = int] = []`)
+   - Example: `var user: user?` (nilable, implicitly defaults to `nil`)
    - Example: `var a, b = x, y` or `var a: int, b: str = x, y`
 1. The `:=` operator declares and initializes a variable with type inference.
    - Example: `count := 0` (equivalent to `var count = 0`)
@@ -762,7 +823,7 @@ if = "if" (if_condition_bool | if_narrowing_as | if_narrowing_nil)
 ### 9.5. For
 
 ```wirth
-for_clause = expression | identifier "in" invocation .
+for_clause = expression | identifier "in" expression .
 for = "for" [ ":" identifier ] [ for_clause ] block .
 for_break = "break" [ ":" identifier ] .
 for_continue = "continue" [ ":" identifier ] .
@@ -772,16 +833,17 @@ for_continue = "continue" [ ":" identifier ] .
 1. For statements have three forms:
    - Infinite loop: `for { ... }`
    - Condition loop: `for condition { ... }`
-   - For-in loop: `for item in iterator { ... }`
-1. For-in loops iterate over iterators.
+   - For-in loop: `for item in expr { ... }`
+1. For-in loops use the iter func pattern defined in `duralade.iter`.
    - The loop variable is re-declared for each iteration.
-   - Example: `for i in range(end = 10) { ... }` for numeric iteration.
-   - The expression must be a function call (see Section 10.6).
-   - ❓ Iterator protocol TBD. Current design: `for item in collection.iter()` where `iter()` is a function accepting
-     `implicit yielder[t]`. The compiler infers `item`'s type from the yielder's generic parameter. For index+value, use
-     `iter_index()` returning anonymous data with both fields.
+   - The expression after `in` must evaluate to a func (the iter func) or a compound with an `iter` field containing one.
+   - The runtime constructs a `duralade.iter::yielder` entity and passes it to the iter func as a regular parameter.
+   - The iter func calls `yielder.yield(value = v)` to produce values; each call executes the for body.
+   - The runtime sets `yielder.active` to `false` on `break`. The iter func should check this after each `yield`.
+   - `yielder.yield()` also returns `{ active: bool }` as a convenience.
+1. `break` and `continue` propagate across for-in boundaries, including labeled forms targeting outer loops.
 1. For statements can have an optional label for use with `break` and `continue`.
-   - Example: `for:outer item in collection.iter() { ... }`
+   - Example: `for:outer item in iter::range(end = 10) { ... }`
    - 🔒 Loop labels must not have spaces around the colon.
 1. `break` exits the innermost loop, or the labeled loop if a label is specified.
    - Example: `break:outer`
@@ -827,14 +889,17 @@ implicitly_statement = "implicitly" expression { "," expression } [ "," ] .
 implicitly = implicitly_block | implicitly_statement .
 ```
 
-1. Implicitly statements set implicit context values that are available by type to called functions (see Section 8.2).
-1. Implicitly has two forms: block-scoped and rest-of-outer-block.
-   - Block-scoped form sets implicits for a specific block.
-   - Rest-of-outer-block form sets implicits for the remainder of the current block.
-1. Multiple expressions can be comma-separated to set multiple implicit values.
-   - Setting the same type twice in one `implicitly` statement is a compile error.
-1. Each expression's type determines which implicit context value is set.
-   - If an implicit of the same type already exists in the context, it is shadowed by the new value.
+1. Sets implicit context values available by type to called functions (see Section 8.2).
+1. Two forms: block-scoped (with block) and rest-of-outer-block (without block).
+1. Multiple expressions can be comma-separated. Duplicate types in one statement is a compile error.
+1. Keyed by base (non-nilable) named type. Nilable expressions (`foo?`) store under the base type.
+   - Must be concrete named types - no anonymous types, duck types, or `any`.
+   - Use `as` to narrow broad types: `implicitly value as specific_type`.
+   - Same-type values in outer scope are shadowed.
+1. Does not rebind already-bound implicit fields in the current scope - only affects transitive calls.
+   - To update the current binding: reassign the variable, then `implicitly` to propagate.
+   - ❓ Nilable expression flowing into non-nilable `implicit` field causes runtime error. Type checker should warn. TBD.
+   - ❓ Callable implicits (function signature types) TBD - requires structural/duck type matching.
 
 ### 9.9. Patch
 
@@ -881,6 +946,7 @@ patch = patch_chain | patch_complete .
 ```wirth
 expression = expression_parenthesized |
              expression_access |
+             module_access |
              identifier |
              outer |
              unary |
@@ -889,6 +955,7 @@ expression = expression_parenthesized |
              invocation |
              literal |
              wait |
+             spawn |
              anonymous_data |
              anonymous_func .
 
@@ -903,6 +970,8 @@ expression_access = expression ( "." | "?." | "->" ) identifier .
 1. Entity reference access expressions use `->` to access fields or methods on entity references (see Section 7.3).
    - The `->` operator performs blocking calls.
    - Only valid on entity reference types.
+1. All expression forms use parenthesized or operator syntax, never space-separated arguments.
+   - 💭 Why? Space-separated forms are reserved for statements (e.g., `var`, `return`). Expressions compose inside other expressions, so parenthesized syntax avoids ambiguity and keeps the grammar predictable.
 1. Operator precedence from highest to lowest:
    - Parentheses `()`
    - Access `.`, `?.`, and `->`
@@ -923,10 +992,9 @@ outer = "outer" { "." "outer" } .
 1. The `outer` keyword provides access to the immediately enclosing scope.
 1. `outer` can be chained to access further enclosing scopes.
    - Example: `outer.outer.field_name`
-1. Through `outer`, you can access anything the outer scope provides: fields, functions, imports, variables.
+1. Through `outer`, you can access anything the outer scope provides: fields, functions, variables.
    - Example: `outer.order_id` - access shadowed field
    - Example: `outer.some_func()` - call outer function
-   - Example: `outer.some_import` - access shadowed import
 1. `outer` itself cannot be accessed as a value (e.g., no `var x = outer`).
    - 💭 Why? `outer` is a scope accessor, not a value. It must be followed by field or function access.
 
@@ -1000,14 +1068,14 @@ narrowing = narrowing_nil_default | narrowing_nil_custom | narrowing_as_default 
 1. Form 1: `expr? else! value` - Nil check with explicit `out!` value.
    - If nil, early-returns with `out!` set to the expression.
    - If non-nil, evaluates to the unwrapped (non-nilable) value.
-   - Example: `result := entity.run_result(e)? else! error.create("result not ready")`
+   - Example: `result := entity::run_result(e)? else! error::create("result not ready")`
 1. Form 2: `expr?!` - Nil check with default error.
    - Like form 1 but defaults to a generic "value was nil" error, only usable when `out!` is an error type.
-   - Example: `result := entity.run_result(e)?!`
+   - Example: `result := entity::run_result(e)?!`
 1. Form 3: `expr as type else! value` - Type assertion with explicit `out!` value.
    - If not assignable to type, early-returns with `out!` set to the expression.
    - If assignable, evaluates to the value with the narrowed type.
-   - Example: `msg := inbox as request_message else! error.create("unexpected message type")`
+   - Example: `msg := inbox as request_message else! error::create("unexpected message type")`
 1. Form 4: `expr as! type` - Type assertion with default error.
    - Like form 3 but defaults to an error including expected and actual types, only usable when `out!` is an error type.
    - Example: `msg := inbox as! request_message`
@@ -1106,8 +1174,8 @@ literal = literal_number | literal_string | literal_bool | literal_nil | literal
    - Example: ` ``hello`` ` produces `hello`.
    - Example: ` ``C:\path\file`` ` produces `C:\path\file` (backslashes are literal).
    - Example: ``` `` `SELECT * FROM `users` `` ``` produces `` `SELECT * FROM `users` `` (single backticks are literal).
-   - Example: ` ``` has ``two`` backticks ``` ` — use 3-backtick delimiter when content contains ```` `` ````.
-   - 💭 Why N-backtick delimiters? This makes raw strings truly "raw" — zero escape sequences are needed, ever. Just
+   - Example: ` ``` has ``two`` backticks ``` ` - use 3-backtick delimiter when content contains ```` `` ````.
+   - 💭 Why N-backtick delimiters? This makes raw strings truly "raw" - zero escape sequences are needed, ever. Just
      widen the delimiter to accommodate any content. Single backticks are reserved for raw identifiers (Section 5).
    - ❓ Should multiline strings support automatic indentation handling (e.g., YAML-like indent removal or Scala-like
      `stripIndent`)?
@@ -1140,7 +1208,30 @@ wait = "wait" "(" expression ")" .
      instead: `result := wait(expr?)?!`
 1. ❓ Timeout support TBD.
 
-### 10.9. Anonymous Functions and Data
+### 10.9. Spawn
+
+```wirth
+spawn = "spawn" "(" invocation [ "," invocation_arguments ] ")" .
+```
+
+1. Spawn creates an independent entity instance.
+   - First argument is an entity invocation (entity name with constructor arguments).
+   - Additional keyword arguments configure the instance.
+   - Example: `ref := spawn(transfer(from_account = "acc1", to_account = "acc2", amount = 100))!.entity`
+   - Example with id: `spawn(transfer(from_account = "acc1", to_account = "acc2", amount = 100), id = "xfer1")!`
+1. Returns `{ entity: &T?, out! :error? }` where `T` is the entity type.
+   - `entity` is the reference to the spawned instance (nil when spawn fails).
+   - `out!` is populated when the spawn itself fails (e.g. invalid entity type, runtime refusal).
+1. Blocking - cannot be used in `view` or `noblock` functions.
+   - 💭 Why? Spawn has durable side effects (creating an independent entity).
+1. The spawned entity runs independently from the caller.
+   - Use `->` on the returned reference to interact with it (see Section 7.3).
+1. Keyword arguments:
+   - `id`: optional `str` - caller-chosen instance identifier. Runtime assigns one if omitted.
+   - ❓ Additional spawn arguments (priority, affinity, etc.) TBD.
+1. ❓ Operator customization of remote-ness TBD - how operators influence whether spawned entities run locally, on a specific node, or are scheduled by a cluster.
+
+### 10.10. Anonymous Functions and Data
 
 ```wirth
 anonymous_data = "data" "{" { field_signature } "}" .

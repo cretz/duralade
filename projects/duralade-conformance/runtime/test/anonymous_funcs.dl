@@ -1,0 +1,40 @@
+import duralade.assert
+import duralade.test
+
+@test
+func anon_func_basic_call {
+    out! :error?
+
+    f := func {
+        in x: int
+        out value = x + 1
+    }
+    r := f(x = 41)
+    assert::equal(actual = r.value, expected = 42)!
+}
+
+@test
+func anon_func_captures_reassignment {
+    out! :error?
+
+    x := 1
+    f := func {
+        out value = x
+    }
+    x = 2
+    assert::equal(actual = f().value, expected = 2)!
+}
+
+@test
+func anon_func_mutates_captured_var {
+    out! :error?
+
+    total := 0
+    add := func {
+        in n: int
+        total = total + n
+    }
+    add(n = 3)
+    add(n = 4)
+    assert::equal(actual = total, expected = 7)!
+}

@@ -1,0 +1,11 @@
+[package]
+name = "duralade-stdlib"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+path = "src/mod.rs"
+
+[dependencies]
+duralade-language = { path = "../duralade-language" }
+tracing = "0.1"

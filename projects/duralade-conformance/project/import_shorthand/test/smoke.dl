@@ -1,0 +1,13 @@
+import duralade.assert
+import duralade.test
+import import_shorthand.point
+
+# Shorthand: point(...) instead of point::point(...)
+@test
+func construct_via_shorthand {
+    out! :error?
+
+    p := point(x = 3, y = 4)
+    assert::equal(actual = p.x, expected = 3)!
+    assert::equal(actual = p.y, expected = 4)!
+}

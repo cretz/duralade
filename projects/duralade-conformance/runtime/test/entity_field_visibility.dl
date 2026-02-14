@@ -1,0 +1,57 @@
+import duralade.assert
+import duralade.test
+
+entity box {
+    in label: str
+    value count = 0
+
+    out func get_label {
+        out label = label
+    }
+
+    out func get_state {
+        out count = count
+        out label = label
+    }
+
+    out func increment {
+        count += 1
+    }
+
+    out func set_label {
+        in new_label: str
+        label = new_label
+    }
+}
+
+@test
+func in_field_visible_from_member_func {
+    out! :error?
+
+    b := box(label = "hello")
+    r := b.get_label()
+    assert::equal(actual = r.label, expected = "hello")!
+}
+
+@test
+func mutation_visible_across_calls {
+    out! :error?
+
+    b := box(label = "test")
+    assert::equal(actual = b.get_state().count, expected = 0)!
+
+    b.increment()
+    b.increment()
+    assert::equal(actual = b.get_state().count, expected = 2)!
+}
+
+@test
+func set_and_read_across_funcs {
+    out! :error?
+
+    b := box(label = "old")
+    assert::equal(actual = b.get_label().label, expected = "old")!
+
+    b.set_label(new_label = "new")
+    assert::equal(actual = b.get_label().label, expected = "new")!
+}

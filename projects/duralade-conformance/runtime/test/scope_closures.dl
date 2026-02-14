@@ -1,0 +1,88 @@
+import duralade.assert
+import duralade.iter
+import duralade.test
+
+@test
+func closure_in_for_loop_reads_loop_body_var {
+    out! :error?
+
+    result := 0
+    for i in iter::range(end = 3) {
+        add := func {
+            result = result + i
+        }
+        add()
+    }
+    # 0 + 1 + 2 = 3
+    assert::equal(actual = result, expected = 3)!
+}
+
+@test
+func closure_mutates_wrapper_local {
+    out! :error?
+
+    total := 0
+    add := func {
+        in n: int
+        total = total + n
+    }
+    add(n = 3)
+    add(n = 4)
+    assert::equal(actual = total, expected = 7)!
+}
+
+@test
+func closure_reads_wrapper_after_reassignment {
+    out! :error?
+
+    x := 1
+    f := func {
+        out value = x
+    }
+    x = 2
+    assert::equal(actual = f().value, expected = 2)!
+}
+
+@test
+func closure_reads_wrapper_local {
+    out! :error?
+
+    x := 42
+    f := func {
+        out value = x
+    }
+    assert::equal(actual = f().value, expected = 42)!
+}
+
+@test
+func nested_closure_mutates_grandparent_local {
+    out! :error?
+
+    x := 0
+    wrapper := func {
+        out done: bool
+        inner := func {
+            x = x + 1
+        }
+        inner()
+        done = true
+    }
+    wrapper()
+    wrapper()
+    assert::equal(actual = x, expected = 2)!
+}
+
+@test
+func nested_closure_reads_grandparent_local {
+    out! :error?
+
+    x := 10
+    wrapper := func {
+        out value: int
+        inner := func {
+            out value = x
+        }
+        value = inner().value
+    }
+    assert::equal(actual = wrapper().value, expected = 10)!
+}

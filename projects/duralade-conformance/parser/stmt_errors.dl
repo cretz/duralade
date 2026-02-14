@@ -7,9 +7,6 @@ func defer_errors {
 func for_errors {
     for
     ^^^ @@ERROR: Expected expression or '{' after 'for'
-    for x in items {
-             ^^^^^ @@ERROR: For-in expression must be an invocation
-    }
     for: {
        ^ @@ERROR: Expected label name after ':'
     }
@@ -69,6 +66,11 @@ func patch_errors {
 ^^^^^^^^^^^ @@ERROR: Expected '{{' or 'complete' after patch version
 % myother {{
 ^^^^^^^^^^^^ @@ERROR: Unterminated patch chain, expected '% }}'
+}
+
+func return_errors {
+    return!
+    ^^^^^^^ @@ERROR: Expected expression after 'return!'
 }
 
 func stmt_termination_with_comment {

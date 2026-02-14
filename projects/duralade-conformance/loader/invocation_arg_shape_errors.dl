@@ -1,0 +1,29 @@
+func missing_required_argument {
+    takes_pair(a = 1)
+    ^^^^^^^^^^^^^^^^^ @@ERROR: missing required argument 'b'
+}
+
+func takes_pair {
+    in a: int
+    in b: str
+}
+
+func type_mismatch_expr {
+    takes_pair(a = 1, b = 1 + 2)
+                          ^^^^^ @@ERROR: argument 'b' type mismatch: expected str, got int
+}
+
+func type_mismatch_int {
+    takes_pair(a = "x", b = "ok")
+                   ^^^ @@ERROR: argument 'a' type mismatch: expected int, got str
+}
+
+func type_mismatch_str {
+    takes_pair(a = 1, b = 2)
+                          ^ @@ERROR: argument 'b' type mismatch: expected str, got int
+}
+
+func unknown_argument {
+    takes_pair(a = 1, b = "ok", c = true)
+                                ^ @@ERROR: unknown argument 'c'
+}

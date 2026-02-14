@@ -1,0 +1,58 @@
+import duralade.assert
+import duralade.test
+
+@test
+func add_assign {
+    out! :error?
+
+    x := 10
+    x += 5
+    assert::equal(actual = x, expected = 15)!
+}
+
+@test
+func chained_compound_assign {
+    out! :error?
+
+    x := 0
+    x += 10
+    x -= 3
+    x *= 2
+    assert::equal(actual = x, expected = 14)!
+}
+
+@test
+func div_assign {
+    out! :error?
+
+    x := 20
+    x /= 4
+    assert::equal(actual = x, expected = 5)!
+}
+
+@test
+func mod_assign {
+    out! :error?
+
+    x := 10
+    x %= 3
+    assert::equal(actual = x, expected = 1)!
+}
+
+@test
+func mul_assign {
+    out! :error?
+
+    x := 4
+    x *= 3
+    assert::equal(actual = x, expected = 12)!
+}
+
+@test
+func sub_assign {
+    out! :error?
+
+    x := 10
+    x -= 3
+    assert::equal(actual = x, expected = 7)!
+}

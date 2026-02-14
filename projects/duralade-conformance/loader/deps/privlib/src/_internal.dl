@@ -1,0 +1,3 @@
+out func helper {
+    out result: int
+}

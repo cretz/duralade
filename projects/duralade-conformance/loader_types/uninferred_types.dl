@@ -1,0 +1,115 @@
+# Explicit type annotations allow non-uniform and empty collections
+
+import duralade.map
+
+# Empty array with explicit type - var
+func annotated_empty_array {
+    var x: array[t = int] = []
+    a := x
+         ^ @@TYPE: duralade.array::array[t = duralade.int::int]
+}
+
+# Empty map with explicit type - var
+func annotated_empty_map {
+    var x: map[k = str, v = int] = { }
+    a := x
+         ^ @@TYPE: duralade.map::map[k = duralade.str::str, v = duralade.int::int]
+}
+
+# Mixed array with explicit any type - var
+func annotated_mixed_array {
+    var x: array[t = any] = [1, "hello", true]
+    a := x
+         ^ @@TYPE: duralade.array::array[t = any]
+}
+
+# Mixed map values with explicit any type - var
+func annotated_mixed_map_values {
+    var x: map[k = str, v = any] = { "a" = 1, "b" = "hello" }
+    a := x
+         ^ @@TYPE: duralade.map::map[k = duralade.str::str, v = any]
+}
+
+# Nil with explicit nilable type - var
+func annotated_nil {
+    var x: int? = nil
+    a := x
+         ^ @@TYPE: duralade.int::int?
+}
+
+# Empty array with explicit type - field
+func field_annotated_empty_array {
+    out items: array[t = int] = []
+    a := items
+         ^^^^^ @@TYPE: duralade.array::array[t = duralade.int::int]
+}
+
+# Empty map with explicit type - field
+func field_annotated_empty_map {
+    out items: map[k = str, v = int] = { }
+    a := items
+         ^^^^^ @@TYPE: duralade.map::map[k = duralade.str::str, v = duralade.int::int]
+}
+
+# Nil with explicit nilable type - field
+func field_annotated_nil {
+    out result: int? = nil
+    a := result
+         ^^^^^^ @@TYPE: duralade.int::int?
+}
+
+# Uniform array infers without annotation - field
+func field_inferred_uniform_array {
+    out items = [1, 2, 3]
+    a := items
+         ^^^^^ @@TYPE: duralade.array::array[t = duralade.int::int]
+}
+
+# Uniform map infers without annotation - field
+func field_inferred_uniform_map {
+    out items = { "a" = 1, "b" = 2 }
+    a := items
+         ^^^^^ @@TYPE: duralade.map::map[k = duralade.str::str, v = duralade.int::int]
+}
+
+# Uniform array infers without annotation - var
+func inferred_uniform_array {
+    x := [1, 2, 3]
+    a := x
+         ^ @@TYPE: duralade.array::array[t = duralade.int::int]
+}
+
+# Uniform map infers without annotation - var
+func inferred_uniform_map {
+    x := { "a" = 1, "b" = 2 }
+    a := x
+         ^ @@TYPE: duralade.map::map[k = duralade.str::str, v = duralade.int::int]
+}
+
+# Nilable var without initializer defaults to nil
+func nilable_var_no_init {
+    var x: int?
+    a := x
+         ^ @@TYPE: duralade.int::int?
+}
+
+# Var shorthand - name derived from type
+func var_shorthand_array {
+    var :array[t = int] = [1, 2, 3]
+    a := array
+         ^^^^^ @@TYPE: duralade.array::array[t = duralade.int::int]
+}
+
+# Var shorthand - empty collection with type
+func var_shorthand_empty_map {
+    var :map[k = str, v = int] = { }
+    a := map
+         ^^^ @@TYPE: duralade.map::map[k = duralade.str::str, v = duralade.int::int]
+}
+
+# Var shorthand - nilable, no initializer
+func var_shorthand_nilable {
+    var :int?
+    a := int
+         ^^^ @@TYPE: duralade.int::int?
+}

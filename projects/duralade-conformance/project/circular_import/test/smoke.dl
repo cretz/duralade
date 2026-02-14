@@ -1,0 +1,16 @@
+import circular_import.alpha
+import circular_import.beta
+import duralade.assert
+import duralade.test
+
+@test
+func circular_types_work {
+    out! :error?
+
+    a := alpha::alpha_thing(name = "hello")
+    b := beta::beta_thing(label = "world")
+    r1 := alpha::make_pair(a, b).result
+    assert::equal(actual = r1, expected = "hello")!
+    r2 := beta::use_alpha(a).result
+    assert::equal(actual = r2, expected = "hello")!
+}

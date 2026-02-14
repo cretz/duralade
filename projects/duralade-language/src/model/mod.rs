@@ -4,6 +4,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct NodeId(pub u32);
 
+impl NodeId {
+    pub const UNKNOWN: NodeId = NodeId(u32::MAX);
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InvalidNode {
     pub node_id: NodeId,
@@ -15,6 +19,7 @@ mod construct;
 mod expr;
 mod source;
 mod stmt;
+mod symbol;
 mod types;
 
 pub use basic::*;
@@ -22,4 +27,5 @@ pub use construct::*;
 pub use expr::*;
 pub use source::*;
 pub use stmt::*;
+pub use symbol::*;
 pub use types::*;

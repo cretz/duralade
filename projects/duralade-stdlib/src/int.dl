@@ -1,0 +1,9 @@
+import duralade.str
+
+out builtin data int {
+}
+
+out builtin view func from_str {
+    in :str
+    out result: int?
+}

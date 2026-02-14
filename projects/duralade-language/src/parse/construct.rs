@@ -7,10 +7,12 @@ use super::source;
 use super::types::parse_type;
 use super::{ParseContext, ParseError};
 
-/// Parsed modifiers: [out] [view|noblock]
+/// Parsed modifiers: [out] [builtin] [view|noblock]
 pub(crate) struct ConstructModifiers {
     /// Span of 'out' keyword if present (start..end, end-exclusive)
     pub out: Option<(usize, usize)>,
+    /// Span of 'builtin' keyword if present
+    pub builtin: Option<(usize, usize)>,
     /// Span of 'view' keyword if present
     pub view: Option<(usize, usize)>,
     /// Span of 'noblock' keyword if present
@@ -77,6 +79,28 @@ pub(crate) fn parse_modifiers(ctx: &mut ParseContext) -> ConstructModifiers {
             None
         };
 
+    // Parse optional 'builtin' modifier
+    let builtin = if starts_with_keyword(ctx.remaining(), "builtin") {
+        let start = ctx.pos();
+        ctx.advance(7);
+        if !ctx.allow_builtin {
+            ctx.add_parse_error(ParseError::new(
+                (start, start + 7),
+                "'builtin' requires allow_builtin = true in duralade.toml".to_string(),
+            ));
+        }
+        let after_modifier = ctx.pos();
+        if ctx.parse_trivia() != " " {
+            ctx.add_strict_violation(ParseError::new(
+                (after_modifier, ctx.pos()),
+                "Expected exactly one space after 'builtin'".to_string(),
+            ));
+        }
+        Some((start, start + 7))
+    } else {
+        None
+    };
+
     // Parse optional 'view' or 'noblock' modifier
     let (view, noblock) = if starts_with_keyword(ctx.remaining(), "view") {
         let start = ctx.pos();
@@ -104,7 +128,12 @@ pub(crate) fn parse_modifiers(ctx: &mut ParseContext) -> ConstructModifiers {
         (None, None)
     };
 
-    ConstructModifiers { out, view, noblock }
+    ConstructModifiers {
+        out,
+        builtin,
+        view,
+        noblock,
+    }
 }
 
 /// Parse [out] [view|noblock] keyword name with strict spacing.
@@ -138,7 +167,7 @@ pub(crate) fn parse_construct_header(
             errors.push(ctx.error_here(format!("Expected identifier after '{}'", keyword)));
             Ident {
                 node_id: ctx.alloc_node_id(ctx.pos(), ctx.pos()),
-                name: "<unknown>".to_string(),
+                name: Symbol::unknown(),
                 is_raw: false,
             }
         }
@@ -146,7 +175,7 @@ pub(crate) fn parse_construct_header(
             errors.push(err);
             Ident {
                 node_id: ctx.alloc_node_id(ctx.pos(), ctx.pos()),
-                name: "<unknown>".to_string(),
+                name: Symbol::unknown(),
                 is_raw: false,
             }
         }
@@ -214,6 +243,17 @@ pub(crate) fn parse_construct(
             format!("'{}' construct cannot have 'out' modifier", header.keyword),
         ));
     }
+    if let Some(span) = header.modifiers.builtin
+        && !matches!(header.keyword.as_str(), "data" | "entity" | "func")
+    {
+        ctx.add_parse_error(ParseError::new(
+            span,
+            format!(
+                "'{}' construct cannot have 'builtin' modifier",
+                header.keyword
+            ),
+        ));
+    }
     if header.keyword == "native"
         && header.modifiers.view.is_none()
         && header.modifiers.noblock.is_none()
@@ -234,6 +274,22 @@ pub(crate) fn parse_construct(
         "type" => ConstructKind::TypeAlias(parse_type_alias(ctx, start_pos)),
         "data" => ConstructKind::Data(parse_data(ctx, start_pos, false)),
         "entity" => ConstructKind::Entity(parse_entity(ctx, start_pos)),
+        "func" if header.modifiers.builtin.is_some() => {
+            // builtin func: fields only, no body - parsed like native
+            let native = parse_native(
+                ctx,
+                start_pos,
+                header.modifiers.view.is_some(),
+                header.modifiers.noblock.is_some(),
+            );
+            ConstructKind::Func(Func {
+                node_id: native.node_id,
+                view: native.view,
+                noblock: native.noblock,
+                fields: native.fields,
+                stmts: Vec::new(),
+            })
+        }
         "func" => ConstructKind::Func(parse_func(
             ctx,
             start_pos,
@@ -267,6 +323,7 @@ pub(crate) fn parse_construct(
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
         annotations,
         out: header.modifiers.out.is_some(),
+        builtin: header.modifiers.builtin.is_some(),
         name: header.name,
         kind,
     }
@@ -289,36 +346,56 @@ pub(crate) fn parse_field(
         (Some(FieldVarModifier::Out), false, 0)
     } else {
         let modifier_word = ctx.remaining().split(' ').next().unwrap_or("");
-        match modifier_word {
-            "intype" => (None, true, 7),
-            "in" => (Some(FieldVarModifier::In), false, 3),
-            "out!" => (Some(FieldVarModifier::OutEarly), false, 5),
-            "out" => (Some(FieldVarModifier::Out), false, 4),
-            "inout" => (Some(FieldVarModifier::Inout), false, 6),
-            "value" => (Some(FieldVarModifier::Value), false, 6),
-            "implicit" => (Some(FieldVarModifier::Implicit), false, 9),
-            _ => {
-                if data_field {
-                    // Data fields have no modifier — check if it looks like a field
-                    let ch = ctx.remaining().chars().next().unwrap_or('\0');
-                    if ch == ':' || ch == '_' || ch.is_lowercase() {
-                        (None, false, 0)
-                    } else if annotations.is_empty() {
-                        return None;
-                    } else {
-                        ctx.add_parse_error(ParseError::new(
-                            (start_pos, ctx.pos()),
-                            "Expected field after annotations".to_string(),
-                        ));
-                        return Some(Field {
-                            node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
-                            annotations,
-                            kind: FieldKind::Invalid(InvalidNode {
-                                node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
-                            }),
-                        });
-                    }
+        match (data_field, modifier_word) {
+            (_, "intype") => (None, true, 7),
+            (_, "out!") => (Some(FieldVarModifier::OutEarly), false, 5),
+            (false, "in") => (Some(FieldVarModifier::In), false, 3),
+            (false, "out") => (Some(FieldVarModifier::Out), false, 4),
+            (false, "inout") => (Some(FieldVarModifier::Inout), false, 6),
+            (false, "value") => (Some(FieldVarModifier::Value), false, 6),
+            (false, "implicit") => (Some(FieldVarModifier::Implicit), false, 9),
+            (true, modifier_word @ ("in" | "out" | "inout" | "value" | "implicit"))
+                if {
+                    let after = ctx.remaining()[modifier_word.len()..].trim_start();
+                    let ch = after.chars().next().unwrap_or('\0');
+                    ch == '_' || ch.is_lowercase()
+                } =>
+            {
+                let len = modifier_word.len();
+                ctx.add_parse_error(ParseError::new(
+                    (ctx.pos(), ctx.pos() + len),
+                    format!(
+                        "Data fields don't have modifiers (remove '{}')",
+                        modifier_word
+                    ),
+                ));
+                ctx.advance(len);
+                ctx.parse_trivia();
+                (None, false, 0)
+            }
+            (true, _) => {
+                // Data fields have no modifier.
+                let ch = ctx.remaining().chars().next().unwrap_or('\0');
+                if ch == ':' || ch == '_' || ch.is_lowercase() {
+                    (None, false, 0)
                 } else if annotations.is_empty() {
+                    return None;
+                } else {
+                    ctx.add_parse_error(ParseError::new(
+                        (start_pos, ctx.pos()),
+                        "Expected field after annotations".to_string(),
+                    ));
+                    return Some(Field {
+                        node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
+                        annotations,
+                        kind: FieldKind::Invalid(InvalidNode {
+                            node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
+                        }),
+                    });
+                }
+            }
+            (false, _) => {
+                if annotations.is_empty() {
                     return None;
                 } else {
                     // Had annotations but no field modifier
@@ -337,8 +414,15 @@ pub(crate) fn parse_field(
             }
         }
     };
-
     if modifier_len > 0 {
+        // A field modifier must be followed by an identifier or ':' (for shorthand type).
+        // Peek past the modifier and whitespace - if the next token is '=' this is an
+        // assignment statement (e.g. `value = expr`), not a modifier-prefixed field.
+        let after = ctx.remaining()[modifier_len..].trim_start();
+        if after.starts_with('=') && !after.starts_with("==") {
+            return None;
+        }
+
         ctx.advance(modifier_len);
 
         // Parse trivia after modifier - strict mode: no additional whitespace
@@ -422,7 +506,7 @@ pub(crate) fn parse_field(
             ));
             Ident {
                 node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
-                name: "<unknown>".to_string(),
+                name: Symbol::unknown(),
                 is_raw: false,
             }
         });
@@ -536,7 +620,7 @@ pub(crate) fn parse_field(
 
 /// Derive a field name from a type for shorthand `:type` fields.
 /// Unwraps nilable and entity ref wrappers, then uses the last path segment of a named type.
-fn derive_field_name(ty: &Type) -> Option<Ident> {
+pub(super) fn derive_field_name(ty: &Type) -> Option<Ident> {
     match ty {
         Type::Named(named) => named.path.last().cloned(),
         Type::Nilable(n) => derive_field_name(&n.inner),
@@ -642,6 +726,18 @@ pub(crate) fn parse_data(ctx: &mut ParseContext, start_pos: usize, anonymous: bo
         },
     );
 
+    for field in &body.fields {
+        let FieldKind::Var(var) = &field.kind else {
+            continue;
+        };
+        if var.modifier == FieldVarModifier::OutEarly && !anonymous {
+            ctx.add_parse_error(ParseError::new(
+                ctx.node_span(var.node_id),
+                "'out!' field is not allowed in named data".to_string(),
+            ));
+        }
+    }
+
     Data {
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
         fields: body.fields,
@@ -695,6 +791,9 @@ pub(crate) fn parse_func(
         };
     }
 
+    let saved_defer_depth = ctx.defer_depth;
+    ctx.defer_depth = 0;
+
     let body = parse_body(
         ctx,
         BodyOptions {
@@ -703,6 +802,8 @@ pub(crate) fn parse_func(
             ..Default::default()
         },
     );
+
+    ctx.defer_depth = saved_defer_depth;
 
     Func {
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
@@ -729,13 +830,56 @@ fn parse_extern(ctx: &mut ParseContext, start_pos: usize) -> Extern {
         },
     );
 
+    validate_extern_or_native_fields(ctx, &body.fields, "extern");
+
     Extern {
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
         fields: body.fields,
     }
 }
 
-fn parse_native(ctx: &mut ParseContext, start_pos: usize, view: bool, noblock: bool) -> Native {
+fn validate_extern_or_native_fields(
+    ctx: &mut ParseContext,
+    fields: &[Field],
+    construct_name: &str,
+) {
+    for field in fields {
+        let FieldKind::Var(var) = &field.kind else {
+            continue;
+        };
+
+        match var.modifier {
+            FieldVarModifier::Implicit => {
+                ctx.add_parse_error(ParseError::new(
+                    ctx.node_span(var.node_id),
+                    format!("'implicit' field is not allowed in {construct_name}"),
+                ));
+            }
+            FieldVarModifier::Value => {
+                ctx.add_parse_error(ParseError::new(
+                    ctx.node_span(var.node_id),
+                    format!("'value' field is not allowed in {construct_name}"),
+                ));
+            }
+            FieldVarModifier::Out => {
+                if let Some(default_expr) = &var.default {
+                    ctx.add_parse_error(ParseError::new(
+                        ctx.node_span(default_expr.node_id()),
+                        format!("'out' field in {construct_name} cannot have default expression"),
+                    ));
+                }
+            }
+            FieldVarModifier::OutEarly | FieldVarModifier::In | FieldVarModifier::Inout => {}
+        }
+    }
+}
+
+pub(crate) fn parse_native(
+    ctx: &mut ParseContext,
+    start_pos: usize,
+    view: bool,
+    noblock: bool,
+) -> Native {
     if !expect_open_brace(ctx, "native") {
         return Native {
             node_id: ctx.alloc_node_id(start_pos, ctx.pos()),
@@ -752,6 +896,8 @@ fn parse_native(ctx: &mut ParseContext, start_pos: usize, view: bool, noblock: b
             ..Default::default()
         },
     );
+
+    validate_extern_or_native_fields(ctx, &body.fields, "native");
 
     Native {
         node_id: ctx.alloc_node_id(start_pos, ctx.pos()),

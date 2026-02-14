@@ -1,0 +1,36 @@
+# Intype constraint success cases
+
+data any_box {
+    intype t: anylocal
+    value: t
+}
+
+data ok_forwarding {
+    intype t
+    item: serializable_box[t]
+}
+
+data ok_func_in_any_box {
+    item: any_box[t = func { out value: int }]
+}
+
+data ok_int_box {
+    item: serializable_box[t = int]
+}
+
+data serializable_box {
+    intype t
+    value: t
+}
+
+func check_func_in_any_box {
+    x := ok_func_in_any_box(item = any_box[t = func { out value: int }](value = func { out value = 1 }))
+    item := x.item
+            ^^^^^^ @@TYPE: loader_test.intype_constraints::any_box[t = func { out value: duralade.int::int }]
+}
+
+func check_int_box {
+    x := ok_int_box(item = serializable_box[t = int](value = 42))
+    item := x.item
+            ^^^^^^ @@TYPE: loader_test.intype_constraints::serializable_box[t = duralade.int::int]
+}

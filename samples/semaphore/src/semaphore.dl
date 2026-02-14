@@ -1,0 +1,23 @@
+out entity semaphore {
+    inout permits: int
+
+    out func acquire {
+        out! :error?
+
+        wait(permits > 0)!
+        permits -= 1
+    }
+
+    out noblock func acquire_try {
+        out success = false
+
+        if permits > 0 {
+            permits -= 1
+            success = true
+        }
+    }
+
+    out noblock func release {
+        permits += 1
+    }
+}

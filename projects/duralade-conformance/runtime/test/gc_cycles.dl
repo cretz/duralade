@@ -1,0 +1,94 @@
+import duralade.assert
+import duralade.test
+
+# Tests that reference cycles are collected by the GC.
+# The verify_gc flag on the conformance harness checks that no heap entries
+# leak after each test -- so any test here that passes confirms the cycle
+# collector handled the cycle.
+
+# TODO: Once field assignment is supported, add tests for data/list/map self-references.
+
+@test
+func closure_captures_another_closure {
+    out! :error?
+
+    # `double` is captured in the scope, then `wrapper` captures the same scope
+    # which now contains both closures -- creating cross-references
+    # through the shared BindingsFrame.
+    double := func {
+        in x: int
+        out value = x * 2
+    }
+    wrapper := func {
+        in x: int
+        out value = double(x).value + 1
+    }
+    assert::equal(actual = wrapper(x = 5).value, expected = 11)!
+}
+
+@test
+func closure_captures_itself {
+    out! :error?
+
+    # The closure `f` is stored in a local. The closure captures the
+    # enclosing scope which contains `f` -- creating a cycle:
+    # HeapValue::Func -> captured_bindings -> BindingsFrame.stack["f"] -> same Func
+    f := func {
+        out value = 1
+    }
+    assert::equal(actual = f().value, expected = 1)!
+}
+
+@test
+func closure_mutates_and_captures {
+    out! :error?
+
+    # The closure both reads and writes a captured variable, meaning the
+    # BindingsFrame stays live during execution. The cycle between the Func
+    # heap entry and the BindingsFrame must be collected after the test.
+    count := 0
+    inc := func {
+        count = count + 1
+    }
+    inc()
+    inc()
+    inc()
+    assert::equal(actual = count, expected = 3)!
+}
+
+@test
+func nested_closure_chain {
+    out! :error?
+
+    # Three levels of closure nesting, each capturing the parent scope.
+    # Creates a chain of BindingsFrame parents, each potentially in a cycle
+    # with its Func heap entry.
+    a := 1
+    f := func {
+        out value = 0
+
+        b := 2
+        g := func {
+            out value = 0
+
+            c := 3
+            h := func {
+                out value = a + b + c
+            }
+            value = h().value
+        }
+        value = g().value
+    }
+    assert::equal(actual = f().value, expected = 6)!
+}
+
+@test
+func two_closures_capture_same_scope {
+    out! :error?
+
+    x := 10
+    f := func { out value = x }
+    g := func { out value = x + 1 }
+    assert::equal(actual = f().value, expected = 10)!
+    assert::equal(actual = g().value, expected = 11)!
+}

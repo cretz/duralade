@@ -1,0 +1,228 @@
+import duralade.array
+import duralade.assert
+import duralade.error
+import duralade.int
+import duralade.map
+import duralade.str
+import duralade.test
+
+@test
+func bool_keys {
+    out! :error?
+
+    m := { true = "yes", false = "no" }
+    assert::equal(actual = m.get(key = true).result, expected = "yes")!
+    assert::equal(actual = m.get(key = false).result, expected = "no")!
+}
+
+@test
+func contains_key {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2 }
+    assert::equal(actual = m.contains_key(key = "a").result, expected = true)!
+    assert::equal(actual = m.contains_key(key = "z").result, expected = false)!
+}
+
+@test
+func empty_literal {
+    out! :error?
+
+    var m: map[k = str, v = int] = { }
+    assert::equal(actual = m.len().result, expected = 0)!
+}
+
+@test
+func get_missing_key {
+    out! :error?
+
+    m := { "a" = 1 }
+    assert::equal(actual = m.get(key = "z").result, expected = nil)!
+}
+
+@test
+func insertion_order {
+    out! :error?
+
+    # Verify iter returns entries in insertion order
+    m := { "c" = 3, "a" = 1, "b" = 2 }
+    var keys: array[t = str] = []
+    for e in m.iter {
+        keys.push(value = e.key)
+    }
+    # Should be insertion order: c, a, b
+    assert::equal(actual = keys.get(index = 0).result, expected = "c")!
+    assert::equal(actual = keys.get(index = 1).result, expected = "a")!
+    assert::equal(actual = keys.get(index = 2).result, expected = "b")!
+}
+
+@test
+func int_keys {
+    out! :error?
+
+    m := { 1 = "one", 2 = "two", 3 = "three" }
+    assert::equal(actual = m.get(key = 2).result, expected = "two")!
+    assert::equal(actual = m.len().result, expected = 3)!
+}
+
+@test
+func iter_basic {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2, "c" = 3 }
+    sum := 0
+    count := 0
+    for e in m.iter {
+        sum += e.value
+        count += 1
+    }
+    assert::equal(actual = count, expected = 3)!
+    # 1 + 2 + 3 = 6
+    assert::equal(actual = sum, expected = 6)!
+}
+
+@test
+func iter_break {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2, "c" = 3 }
+    count := 0
+    for e in m.iter {
+        if count == 1 {
+            break
+        }
+        count += 1
+    }
+    assert::equal(actual = count, expected = 1)!
+}
+
+@test
+func iter_empty {
+    out! :error?
+
+    var m: map[k = str, v = int] = { }
+    count := 0
+    for e in m.iter {
+        count += 1
+    }
+    assert::equal(actual = count, expected = 0)!
+}
+
+@test
+func iter_entry_fields {
+    out! :error?
+
+    m := { "x" = 42 }
+    for e in m.iter {
+        assert::equal(actual = e.key, expected = "x")!
+        assert::equal(actual = e.value, expected = 42)!
+    }
+}
+
+@test
+func keys_iter_basic {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2, "c" = 3 }
+    var keys: array[t = str] = []
+    for k in m.keys_iter {
+        keys.push(value = k)
+    }
+    assert::equal(actual = keys.len().result, expected = 3)!
+    assert::equal(actual = keys.get(index = 0).result, expected = "a")!
+}
+
+@test
+func keys_iter_empty {
+    out! :error?
+
+    var m: map[k = str, v = int] = { }
+    count := 0
+    for k in m.keys_iter {
+        count += 1
+    }
+    assert::equal(actual = count, expected = 0)!
+}
+
+@test
+func literal_len {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2, "c" = 3 }
+    assert::equal(actual = m.len().result, expected = 3)!
+}
+
+@test
+func remove {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2, "c" = 3 }
+    removed := m.remove(key = "b").result
+    assert::equal(actual = removed, expected = 2)!
+    assert::equal(actual = m.len().result, expected = 2)!
+    assert::equal(actual = m.contains_key(key = "b").result, expected = false)!
+}
+
+@test
+func remove_missing {
+    out! :error?
+
+    m := { "a" = 1 }
+    removed := m.remove(key = "z").result
+    assert::equal(actual = removed, expected = nil)!
+    assert::equal(actual = m.len().result, expected = 1)!
+}
+
+@test
+func set_and_get {
+    out! :error?
+
+    var m: map[k = str, v = int] = { }
+    m.set(key = "x", value = 10)
+    assert::equal(actual = m.get(key = "x").result, expected = 10)!
+    assert::equal(actual = m.len().result, expected = 1)!
+}
+
+@test
+func set_new_key_returns_nil {
+    out! :error?
+
+    var m: map[k = str, v = int] = { }
+    old := m.set(key = "k", value = 5).old_value
+    assert::equal(actual = old, expected = nil)!
+}
+
+@test
+func set_overwrite {
+    out! :error?
+
+    m := { "a" = 1 }
+    old := m.set(key = "a", value = 99).old_value
+    assert::equal(actual = old, expected = 1)!
+    assert::equal(actual = m.get(key = "a").result, expected = 99)!
+    assert::equal(actual = m.len().result, expected = 1)!
+}
+
+@test
+func values_iter_basic {
+    out! :error?
+
+    m := { "a" = 1, "b" = 2, "c" = 3 }
+    sum := 0
+    for v in m.values_iter {
+        sum += v
+    }
+    assert::equal(actual = sum, expected = 6)!
+}
+
+@test
+func values_iter_empty {
+    out! :error?
+
+    var m: map[k = str, v = int] = { }
+    count := 0
+    for v in m.values_iter {
+        count += 1
+    }
+    assert::equal(actual = count, expected = 0)!
+}

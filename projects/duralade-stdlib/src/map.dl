@@ -1,0 +1,65 @@
+import duralade.bool
+import duralade.int
+import duralade.iter
+
+out data entry {
+    intype k
+    intype v: anylocal
+
+    key: k
+    value: v
+}
+
+out builtin data map {
+    intype k
+    intype v: anylocal
+
+    out builtin view func contains_key {
+        in key: k
+        out result: bool
+    }
+
+    out builtin view func get {
+        in key: k
+        out result: v?
+    }
+
+    out builtin view func iter {
+        in :iter::yielder[t = entry[k, v]]
+    }
+
+    out view func keys_iter {
+        in :iter::yielder[t = k]
+
+        for entry in iter {
+            if !yielder.yield(value = entry.key).active {
+                break
+            }
+        }
+    }
+
+    out builtin view func len {
+        out result: int
+    }
+
+    out builtin func remove {
+        in key: k
+        out result: v?
+    }
+
+    out builtin func set {
+        in key: k
+        in value: v
+        out old_value: v?
+    }
+
+    out view func values_iter {
+        in :iter::yielder[t = v]
+
+        for entry in iter {
+            if !yielder.yield(entry.value).active {
+                break
+            }
+        }
+    }
+}

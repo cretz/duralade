@@ -1,0 +1,31 @@
+out entity transfer {
+    in amount: int
+    in from_account: str
+    in to_account: str
+
+    run {
+        out! :error?
+
+        withdraw(account_id = from_account, amount)!
+
+        deposit_result := deposit(account_id = to_account, amount)
+        if err := deposit_result.error? {
+            # Deposit failed, return money to source account
+            # TODO: how to handle if putting the money back also fails?
+            deposit(account_id = from_account, amount)!
+            return! err
+        }
+    }
+}
+
+extern deposit {
+    in account_id: str
+    in amount: int
+    out! :error?
+}
+
+extern withdraw {
+    in account_id: str
+    in amount: int
+    out! :error?
+}

@@ -1,0 +1,92 @@
+import duralade.assert
+import duralade.test
+
+@test
+func if_else_false {
+    out! :error?
+
+    x := 0
+    if false {
+        x = 1
+    } else {
+        x = 2
+    }
+    assert::equal(actual = x, expected = 2)!
+}
+
+@test
+func if_else_if {
+    out! :error?
+
+    x := 0
+    if false {
+        x = 1
+    } else if true {
+        x = 2
+    } else {
+        x = 3
+    }
+    assert::equal(actual = x, expected = 2)!
+}
+
+@test
+func if_else_if_fallthrough {
+    out! :error?
+
+    x := 0
+    if false {
+        x = 1
+    } else if false {
+        x = 2
+    } else {
+        x = 3
+    }
+    assert::equal(actual = x, expected = 3)!
+}
+
+@test
+func if_else_true {
+    out! :error?
+
+    x := 0
+    if true {
+        x = 1
+    } else {
+        x = 2
+    }
+    assert::equal(actual = x, expected = 1)!
+}
+
+@test
+func if_false_skips {
+    out! :error?
+
+    x := 0
+    if false {
+        x = 1
+    }
+    assert::equal(actual = x, expected = 0)!
+}
+
+@test
+func if_true_branch {
+    out! :error?
+
+    x := 0
+    if true {
+        x = 1
+    }
+    assert::equal(actual = x, expected = 1)!
+}
+
+@test
+func if_with_comparison {
+    out! :error?
+
+    x := 10
+    result := 0
+    if x > 5 {
+        result = 1
+    }
+    assert::equal(actual = result, expected = 1)!
+}

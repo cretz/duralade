@@ -1,8 +1,11 @@
 [workspace]
 members = [
-    "duralade-language",
+    "duralade-cli",
     "duralade-conformance-harness",
+    "duralade-language",
     "duralade-lsp",
+    "duralade-stdlib",
+    "duralade-runtime",
 ]
 resolver = "2"
 

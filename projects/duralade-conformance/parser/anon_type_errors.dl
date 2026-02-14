@@ -1,0 +1,14 @@
+func anon_type_comma_in_func_type {
+    var z: func { in a: int, in b: int }
+                           ^ @@ERROR: Unrecognized content in anonymous type
+}
+
+func anon_type_comma_in_single_line {
+    var x: data { a: int, b: int }
+                        ^ @@ERROR: Unrecognized content in anonymous type
+}
+
+func anon_type_no_hang_on_bad_content {
+    var y: data { ??? }
+                  ^ @@ERROR: Unrecognized content in anonymous type
+}
