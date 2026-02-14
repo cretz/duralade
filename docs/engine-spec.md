@@ -10,6 +10,8 @@
    - 2.4. [Visibility and Access Control](#24-visibility-and-access-control)
    - 2.5. [Dependencies](#25-dependencies)
 3. [Build System](#3-build-system)
+   - 3.1. [Bundle Format](#31-bundle-format)
+   - 3.2. [Shared Libraries](#32-shared-libraries)
 4. [Execution Model](#4-execution-model)
    - 4.1. [Overview](#41-overview)
    - 4.2. [Entity Lifecycle](#42-entity-lifecycle)
@@ -80,6 +82,24 @@
      structure self-documenting.
    - ❓ Version field TBD - may be derived from git tags instead of explicit toml field.
    - ❓ Multiple source/test roots TBD - should projects support multiple source_root or tests_root directories?
+1. The optional `[build]` section specifies how to build native libraries from source.
+   - Omit this section if project has no natives and source builds are allowed.
+   - `type` (required) - Build system type: `"cargo"`, `"make"`, or `"none"`.
+   - `type = "none"` indicates source builds are not supported (must distribute as `.dlb`).
+   - Example for Rust natives:
+     ```toml
+     [build]
+     type = "cargo"
+     ```
+   - Example for bundle-only distribution:
+     ```toml
+     [build]
+     type = "none"
+     ```
+   - 💭 Why specify build system? Enables automatic building of dependencies with natives during source builds.
+   - ❓ Build system details TBD (custom scripts, output paths, environment variables, cross-compilation).
+   - ❓ Development mode TBD - how to reference debug build outputs during development (e.g., `cargo build` produces
+     `target/debug/` not `lib/{target}/`).
 
 ### 2.3. Directory Layout
 
@@ -97,6 +117,11 @@
    - Tests can only access `out` items from the main project by default.
    - 💭 Why separate modules? Enforces testing through public interfaces and prevents test code from polluting the
      project modules.
+1. The `lib/` directory contains native shared libraries.
+   - Organized by target triple: `lib/{target}/{project}.{ext}`
+   - Target uses Rust/LLVM/GNU format (e.g., `x86_64-unknown-linux-gnu`)
+   - Extension: `.so` (Linux), `.dll` (Windows), `.dylib` (macOS)
+   - Example: `lib/x86_64-unknown-linux-gnu/my_project.so`
 
 ### 2.4. Visibility and Access Control
 
@@ -125,39 +150,105 @@
 1. Dependencies are declared in the `[dependencies]` section of `duralade.toml`.
 1. The TOML key for each dependency becomes its import alias.
    - Example: `auth = { ... }` allows `import auth.user`.
-1. Three mutually exclusive dependency types are supported.
-1. Git dependencies specify a repository URL and version selector.
-   - Basic syntax: `name = { git = "url", version = "1.2.3" }`
-   - Version selectors (mutually exclusive):
-     - `version` - Semver version, expects git tag with `v` prefix (e.g., `v1.2.3`).
-     - `tag` - Literal git tag name without semver interpretation.
-     - `branch` - Git branch name.
-     - `commit` - Specific commit SHA.
-   - Optional `path` field for monorepo subdirectories.
+1. Four dependency types are supported.
+1. **GitHub dependencies** reference releases with optional bundle assets.
+   - Syntax: `name = { github = "org/repo", version = "1.2.3" }`
+   - Resolution order for version `1.2.3` (git tag `v1.2.3`):
+     1. Try platform-specific bundle: `{name}-{target}.dlb` from release assets
+     2. Try multi-platform bundle: `{name}.dlb` from release assets
+     3. Fall back to git clone and source build if allowed by remote project
+     4. Error if no bundles found and remote project has `[build] type = "none"`
+   - Target triple uses Rust/LLVM/GNU format (e.g., `x86_64-unknown-linux-gnu`).
+   - 💭 Why fallback to source? Projects without natives don't need bundles, avoids timing window when release created
+     before assets uploaded.
    - Example:
      ```toml
      [dependencies]
-     auth = { git = "https://github.com/someorg/duralade-auth", version = "1.2.3" }
-     utils = { git = "https://github.com/someorg/monorepo", version = "2.0.0", path = "packages/utils" }
+     auth = { github = "someorg/duralade-auth", version = "1.2.3" }
      ```
-   - 💭 Why semver with `v` prefix? Git tag convention widely used in open source projects. Semver enables dependency
-     resolution and compatibility checking.
-1. Local directory dependencies specify a filesystem path.
+1. **Git dependencies** specify a repository URL for source builds.
+   - Syntax: `name = { git = "url", version = "1.2.3" }`
+   - Version selectors: `version` (semver with `v` prefix), `tag`, `branch`, `commit`
+   - Optional `path` field for monorepo subdirectories
+   - Always builds from source (never looks for bundles)
+   - 💭 Why separate from github? Supports non-GitHub hosts and forces source builds when desired.
+   - Example:
+     ```toml
+     [dependencies]
+     utils = { git = "https://gitlab.com/org/utils", branch = "main" }
+     ```
+1. **Local path dependencies** point to source project directories.
    - Syntax: `name = { path = "../local-lib" }`
-   - Path is relative to the project root.
-   - The target directory must be a valid Duralade project with its own `duralade.toml`.
-1. Bundle dependencies are not yet defined.
-   - ❓ Bundle format, extension, and structure TBD.
+   - Path is relative to project root
+   - Target must be a valid Duralade project with `duralade.toml`
+1. **Local bundle dependencies** point to bundle files or directories.
+   - Syntax: `name = { bundle_path = "path" }`
+   - If path is a file: loads that specific `.dlb` file
+   - If path is a directory: resolves `{name}-{target}.dlb` or `{name}.dlb`
+   - Example:
+     ```toml
+     auth = { bundle_path = "../bundles/auth.dlb" }
+     vendor = { bundle_path = "../vendor" }  # looks for vendor-{target}.dlb
+     ```
+1. **Stdlib dependency** is implicit but can be overridden.
+   - The `duralade` stdlib is available by default without explicit declaration
+   - Defaults to version statically linked into the runtime
+   - Can be explicitly specified: `duralade = { github = "duralade/stdlib", version = "1.0.0" }`
 1. Open questions about dependency management.
    - ❓ Should `name_override = true` be required when alias doesn't match dependency's project name?
    - ❓ Built-in "shading" support for dependency renaming/relocation/vendoring?
    - ❓ Test-only dependencies - should there be a `[dev-dependencies]` or similar section?
    - ❓ Optional dependencies and feature flags - how to handle optional deps and runtime features (like Cargo
      features)?
+   - ❓ Dependency caching location TBD (e.g., `~/.duralade/cache/`).
 
 ## 3. Build System
 
-TODO: Compilation process, bundling into deployable units, handling dependencies, output formats.
+### 3.1. Bundle Format
+
+1. Duralade bundles (`.dlb` files) are ZIP archives of project directories.
+   - Contains `duralade.toml`, source files, and `lib/` directory (if natives present).
+   - Structure identical to project layout (see Section 2.3).
+1. Bundle naming depends on native library presence.
+   - No natives: `{project}.dlb`
+   - Platform-specific natives: `{project}-{target}.dlb` (e.g., `auth-x86_64-unknown-linux-gnu.dlb`)
+   - Multi-platform natives: `{project}.dlb` with multiple `lib/{target}/` directories
+1. ❓ Bundle extraction and caching TBD (temporary directory, persistent cache, in-memory access).
+1. ❓ Version compatibility and metadata TBD (bundle format version, minimum engine version).
+
+### 3.2. Shared Libraries
+
+1. Native functions are implemented via shared libraries loaded at runtime.
+   - Platform-specific formats: `.dll` (Windows), `.so` (Linux), `.dylib` (macOS).
+1. Shared libraries are discovered and loaded based on project configuration.
+   - Libraries can be bundled with projects or referenced externally.
+   - 💭 Why shared libraries? Enables implementation in any language, optimized performance for system operations, and
+     language-agnostic interop.
+1. Native function symbols follow a naming convention based on qualified names.
+   - Format: `duralade_{qualified_name}` where dots are replaced with underscores.
+   - Example: `native my_project.http.request` → symbol `duralade_my_project_http_request`
+   - 💭 Why qualified names? Prevents symbol collisions when multiple projects are loaded.
+1. All native functions share a uniform C ABI signature.
+   - Functions accept a Duralade invocation context as an opaque handle.
+   - The context provides C helper functions to access `in` fields and set `out` fields.
+   - Helper functions allow zero-copy access to primitive arrays and strings when possible.
+1. The engine provides a standard C header and optional Rust SDK for native implementation.
+   - Helper functions abstract the invocation context and value manipulation.
+   - 💭 Why opaque handles? Allows engine flexibility in internal representation while maintaining stable ABI.
+1. Shared libraries are discovered in the project's `lib/{target}/` directory.
+   - Target triple matches the current runtime platform (obtained at engine compile time).
+   - One shared library per project: `{project_name}.{ext}` (e.g., `my_project.so`)
+   - Example: For project `auth` on Linux x64, loads `lib/x86_64-unknown-linux-gnu/auth.so`
+1. Libraries are loaded eagerly when the project is first accessed.
+   - All native symbols for the project are resolved at load time.
+   - Missing symbols for declared `native` functions result in a project load error.
+   - 💭 Why eager? Fails fast on missing natives, avoids runtime surprises during execution.
+1. Libraries may optionally export a `duralade_init` symbol for one-time initialization.
+   - Called once immediately after library load, before any native functions.
+   - Useful for library-level setup (connection pools, global state, etc.).
+1. ❓ Memory management conventions TBD (ownership transfer, reference counting, allocation responsibilities).
+1. ❓ Error handling mechanism TBD (panics, return codes, out! fields).
+1. ❓ Thread safety requirements TBD (must natives be reentrant?).
 
 ## 4. Execution Model
 
@@ -382,8 +473,7 @@ Optional:
 1. The tick generates a DuraladeFuncComplete event when the function returns.
 1. Request ID is auto-generated if not provided.
 1. Example: `duralade entity invoke-func --func configure --state w1.json --in '{"mode": "fast"}'`
-1. Example:
-   `duralade entity invoke-func --func process --state worker.json --in-file item.json --id req-123`
+1. Example: `duralade entity invoke-func --func process --state worker.json --in-file item.json --id req-123`
 
 #### 4.3.7. `duralade entity invoke-func-noblock`
 
@@ -413,7 +503,8 @@ Output:
 1. Adds a DuraladeFuncInvoke event, runs the tick, and returns the function's out fields.
 1. Noblock functions can mutate entity state.
 1. Example: `duralade entity invoke-func-noblock --func update_config --state worker.json --in '{"timeout": 30}'`
-1. Example: `duralade entity invoke-func-noblock --func process --state worker.json --in-file data.json --out result.json`
+1. Example:
+   `duralade entity invoke-func-noblock --func process --state worker.json --in-file data.json --out result.json`
 
 #### 4.3.8. `duralade entity complete-extern`
 
@@ -438,8 +529,7 @@ Result Data:
 1. Adds a DuraladeExternComplete event to the entity's state.
 1. The request event number must reference a DuraladeExternInvoke event from a previous tick.
 1. Format inference follows the same rules as input arguments (see Section 4.3.2).
-1. Example:
-   `duralade entity complete-extern --request-event 42 --state user-1.json --result '{"status": 200}'`
+1. Example: `duralade entity complete-extern --request-event 42 --state user-1.json --result '{"status": 200}'`
 1. Example: `duralade entity complete-extern --request-event 43 --state worker.json --result-file result.json`
 
 #### 4.3.9. `duralade entity cancel`
@@ -459,7 +549,8 @@ State I/O:
 1. Only one cancel request is allowed per entity.
    - Subsequent cancel requests on the same entity will error.
 1. ❓ Support for cancel reason or message TBD (e.g., `--reason "timeout"`).
-1. ❓ `cancel-func` command TBD - cancel a specific in-flight function invocation by request ID. Note: not all runtimes may support this.
+1. ❓ `cancel-func` command TBD - cancel a specific in-flight function invocation by request ID. Note: not all runtimes
+   may support this.
 1. Example: `duralade entity cancel --state worker-123.json`
 
 #### 4.3.10. `duralade entity checkpoint`
@@ -560,7 +651,9 @@ TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
 1. TODO: Entity reference types and `spawn` builtin
 1. TODO: Blocking behavior with `->` operator for entity refs
 1. TODO: Task semantics and cooperative multitasking
-1. TODO: Get spawn + entity ref stuff right - how does spawn work, what does it return, how do entity refs behave, what operations are available on them (.id, .cancel(), .terminate()?), how does blocking work, what's the difference between local entities and spawned entities
+1. TODO: Get spawn + entity ref stuff right - how does spawn work, what does it return, how do entity refs behave, what
+   operations are available on them (.id, .cancel(), .terminate()?), how does blocking work, what's the difference
+   between local entities and spawned entities
 
 ## 5. History and State
 
@@ -572,8 +665,8 @@ TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
    - 💭 Why event log? Provides complete history for time-travel debugging, deterministic replay, and auditability.
 1. Events serialize to multiple formats, with JSON as the default.
    - Format inferred from file extension or specified via `--state-format`.
-   - Fields marked `user_payload` can be encoded via `--codec` for encryption, compression, or other transformations (see
-     Section 1).
+   - Fields marked `user_payload` can be encoded via `--codec` for encryption, compression, or other transformations
+     (see Section 1).
 1. Event schemas use Duralade type notation with primitive types (`int`, `str`, `bool`, `bytes`, `array[t]`,
    `map[key, value]`, nilability with `?`).
    - `bytes` represents binary data; serialized as base64 in JSON, as raw bytes in binary formats.
@@ -608,6 +701,8 @@ TODO: Debug commands (inspect, interactive, step, breakpoints, etc.)
    - `DuraladeExternInvoke` - Extern invocation requested by Duralade code. **Written by Duralade.**
      - `extern: str` - Name of the extern function being invoked.
      - `args: user_payload[map[str, any]]` - Extern function's in/inout fields.
+   - `DuraladePatchSelect` - Patch version selected during execution. **Written by Duralade.**
+     - `version: str` - Qualified identifier of the selected patch version (e.g., "my_feature.v2").
    - `DuraladeFuncComplete` - Function invocation completed. **Written by Duralade.**
      - `request_event_num: int` - References the event_num of the DuraladeFuncInvoke.
      - `result: user_payload[map[str, any]]` - Function's out fields.

@@ -1,0 +1,8 @@
+[package]
+name = "duralade-lsp"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Will use tower-lsp or similar LSP framework
+# duralade-language = { path = "../duralade-language" }

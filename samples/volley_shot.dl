@@ -1,4 +1,5 @@
-@doc(summary = `Volley shot entity demonstrating concurrent extern calls.
+@doc(
+    summary = ``Volley shot entity demonstrating concurrent extern calls.
 
 Example usage via CLI:
 
@@ -30,7 +31,8 @@ Example usage via CLI:
 
     # Check final result
     duralade entity describe \
-        --state volley1.duralade.json`)
+        --state volley1.duralade.json``,
+)
 
 out data point {
     x: int
@@ -47,9 +49,9 @@ out entity volley_shot {
         out! :error?
 
         # Start all shoots with concurrency control
-        tasks: array[task[t = data { hit: bool, out! :error? }]] = []
+        var tasks: array[task[t = shoot_one@typeout]] = []
         for point in points.iter() {
-            tasks.push(task(work = shoot_one(point)))
+            tasks.push(task = task(work = shoot_one(point)))
         }
 
         # Check each as they complete, return on first hit

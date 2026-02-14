@@ -1,0 +1,31 @@
+func anon_type_field_bad_default {
+    var a: data {
+        : int = abc
+                ^ @@ERROR: Expected '???' after '=' in anonymous type field
+    }
+}
+
+func entity_ref_missing_type {
+    var a: &
+            ^ @@ERROR: Expected identifier
+}
+
+func type_arg_missing_bracket {
+    var a: name[int
+               ^ @@ERROR: Expected ']'
+}
+
+func type_arg_spacing_after_eq {
+    var a: name[key =int]
+                     ^ @@STRICT: Expected exactly one space after '=' in type argument
+}
+
+func type_arg_spacing_before_eq {
+    var a: name[key= int]
+                   ^ @@STRICT: Expected exactly one space before '=' in type argument
+}
+
+func type_arg_starts_with_digit {
+    var a: name[123]
+                ^ @@ERROR: Identifier '123' cannot start with a digit
+}

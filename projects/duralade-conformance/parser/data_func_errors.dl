@@ -1,0 +1,10 @@
+# Test: data body with member funcs (func disambiguation)
+
+data with_funcs {
+    name: string
+
+    func do_something {}
+
+    func alpha {}
+    ^^^^^^^^^^^^^ @@STRICT: 'func alpha' should appear before 'func do_something'
+}

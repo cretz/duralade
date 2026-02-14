@@ -1,4 +1,5 @@
-@doc(summary = `Periodic newsletter subscription entity demonstrating time-based workflows and cancellation.
+@doc(
+    summary = ``Periodic newsletter subscription entity demonstrating time-based workflows and cancellation.
 
 Example usage via CLI:
 
@@ -60,7 +61,8 @@ Example usage via CLI:
         --state sub1.duralade.json
     duralade entity describe \
         --current-time +0 \
-        --state sub1.duralade.json`)
+        --state sub1.duralade.json``,
+)
 
 out entity newsletter_subscription {
     in email: str

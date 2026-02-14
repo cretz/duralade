@@ -1,0 +1,11 @@
+[workspace]
+members = [
+    "duralade-language",
+    "duralade-conformance-harness",
+    "duralade-lsp",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"

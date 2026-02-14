@@ -1,0 +1,29 @@
+# Test file for strict field ordering
+
+# Data fields: simple alphabetical (all implicitly inout)
+data aa_data_alpha {
+    z: int
+    a: str
+    ^^^^^^ @@STRICT: 'inout a' should appear before 'inout z'
+}
+
+# Group ordering: out should appear before implicit
+func bb_group_order {
+    implicit a: int
+    out b: int
+    ^^^^^^^^^^ @@STRICT: 'out b' should appear before 'implicit a'
+}
+
+# Alphabetical within same group
+func cc_alpha_order {
+    in z: int
+    in a: int
+    ^^^^^^^^^ @@STRICT: 'in a' should appear before 'in z'
+}
+
+# Default ordering: in-no-default before in-with-default
+func dd_default_order {
+    in b: int = 5
+    in a: int
+    ^^^^^^^^^ @@STRICT: 'in a' should appear before 'in b'
+}

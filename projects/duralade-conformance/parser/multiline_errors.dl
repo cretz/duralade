@@ -1,0 +1,59 @@
+func multiline_array_missing_trailing_comma {
+    var x = [
+        1,
+        2
+    ]
+    ^ @@STRICT: Trailing comma required in multi-line form
+}
+
+func multiline_array_multiple_items_on_line {
+    var x = [
+        1, 2,
+           ^ @@STRICT: Only one item per line allowed in multi-line form
+    ]
+}
+
+func multiline_array_trailing_comma_single_line {
+    var x = [1, 2,]
+                 ^ @@STRICT: Trailing comma not allowed in single-line form
+}
+
+func multiline_invocation_missing_trailing_comma {
+    foo(
+        x,
+        y
+    )
+    ^ @@STRICT: Trailing comma required in multi-line form
+}
+
+func multiline_invocation_multiple_items_on_line {
+    foo(
+        x, y,
+           ^ @@STRICT: Only one item per line allowed in multi-line form
+    )
+}
+
+func multiline_invocation_trailing_comma_single_line {
+    foo(x, y,)
+            ^ @@STRICT: Trailing comma not allowed in single-line form
+}
+
+func multiline_map_missing_trailing_comma {
+    var x = {
+        "a" = 1,
+        "b" = 2
+    }
+    ^ @@STRICT: Trailing comma required in multi-line form
+}
+
+func multiline_map_multiple_items_on_line {
+    var x = {
+        "a" = 1, "b" = 2,
+                 ^ @@STRICT: Only one item per line allowed in multi-line form
+    }
+}
+
+func multiline_map_trailing_comma_single_line {
+    var x = { "a" = 1, "b" = 2, }
+                              ^ @@STRICT: Trailing comma not allowed in single-line form
+}

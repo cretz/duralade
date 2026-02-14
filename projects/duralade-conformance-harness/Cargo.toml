@@ -1,0 +1,14 @@
+[package]
+name = "duralade-conformance-harness"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+duralade-language = { path = "../duralade-language" }
+
+[dev-dependencies]
+datatest-stable = "0.3"
+
+[[test]]
+name = "conformance"
+harness = false

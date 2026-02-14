@@ -1,0 +1,11 @@
+# Test file for strict nested (member) func ordering
+
+entity member_funcs {
+    func zebra {}
+
+    func alpha {}
+    ^^^^^^^^^^^^^ @@STRICT: 'func alpha' should appear before 'func zebra'
+
+    out func should_be_first {}
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^ @@STRICT: 'out func should_be_first' should appear before 'func alpha'
+}

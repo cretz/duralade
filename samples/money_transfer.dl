@@ -1,4 +1,5 @@
-@doc(summary = `Money transfer workflow entity demonstrating error handling and compensation.
+@doc(
+    summary = ``Money transfer workflow entity demonstrating error handling and compensation.
 
 Example usage via CLI:
 
@@ -33,12 +34,13 @@ Example usage via CLI:
 
     # Check entity completion status
     duralade entity describe \
-        --state xfer1.duralade.json`)
+        --state xfer1.duralade.json``,
+)
 
 out entity money_transfer {
+    in amount: int
     in from_account: str
     in to_account: str
-    in amount: int
 
     run {
         out! :error?

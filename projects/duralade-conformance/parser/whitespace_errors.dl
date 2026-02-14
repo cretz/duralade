@@ -1,0 +1,18 @@
+# Test file for general whitespace violations
+
+# Trailing whitespace on line below
+import foo   
+          ^^^ @@STRICT: Trailing whitespace
+
+
+^ @@STRICT: Multiple consecutive blank lines
+import	bar
+^^^^^^^^^^ @@ERROR: Unrecognized construct
+
+import baz
+
+func line_length_exceeded {
+    var a_long_variable_name = some_function(first_argument, second_argument, third_argument, fourth_argument, fifth_argument, sixth_arg)
+                                                                                                                        ^ @@STRICT: Line exceeds 120 characters
+}
+^ @@STRICT: File must end with a newline

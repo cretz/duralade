@@ -1,0 +1,10 @@
+[package]
+name = "duralade-language"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+
+[dev-dependencies]
+# test dependencies later

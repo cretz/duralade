@@ -1,4 +1,5 @@
-@doc(summary = `Set data structure for storing unique values.
+@doc(
+    summary = ``Set data structure for storing unique values.
 
 Example usage via CLI:
 
@@ -30,12 +31,13 @@ Example usage via CLI:
     # Get current length
     duralade entity view \
         --func len \
-        --state set1.duralade.json`)
+        --state set1.duralade.json``,
+)
 
 out entity set {
     intype t
     in initial_items: array[t] = []
-    value items: map[key = t, value = bool] = {}
+    value items: map[key = t, value = bool] = { }
 
     init {
         for item in initial_items.iter() {
@@ -48,9 +50,8 @@ out entity set {
         items.set(key = item, value = true)
     }
 
-    out noblock func remove {
-        in item: t
-        items.remove(key = item)
+    out noblock func clear {
+        items = { }
     }
 
     out view func contains {
@@ -62,7 +63,8 @@ out entity set {
         out count = items.len()
     }
 
-    out noblock func clear {
-        items = {}
+    out noblock func remove {
+        in item: t
+        items.remove(key = item)
     }
 }

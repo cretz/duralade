@@ -20,7 +20,7 @@
    - 7.5. [Anonymous Types](#75-anonymous-types)
 8. [Constructs](#8-constructs)
    - 8.1. [Overview](#81-overview)
-   - 8.2. [Field Declarations](#82-field-declarations)
+   - 8.2. [Fields](#82-fields)
    - 8.3. [Type Aliases](#83-type-aliases)
    - 8.4. [Data](#84-data)
    - 8.5. [Entities](#85-entities)
@@ -35,6 +35,7 @@
    - 9.6. [Defer](#96-defer)
    - 9.7. [Return](#97-return)
    - 9.8. [Implicitly](#98-implicitly)
+   - 9.9. [Patch](#99-patch)
 10. [Expressions](#10-expressions)
     - 10.1. [Overview](#101-overview)
     - 10.2. [Outer Scope Access](#102-outer-scope-access)
@@ -45,7 +46,6 @@
     - 10.7. [Literals](#107-literals)
     - 10.8. [Wait](#108-wait)
     - 10.9. [Anonymous Functions and Data](#109-anonymous-functions-and-data)
-11. [Patching](#11-patching)
 
 ## 1. Language Overview
 
@@ -115,19 +115,26 @@ unicode_digit = /* a Unicode code point categorized as "Number, decimal digit" *
      the source file requirements.
 1. The language is case-sensitive.
    - Identifiers, keywords, and type names are all distinguished by case.
-1. Newlines are represented by the line feed character `\n` (U+000A).
-   - Carriage return characters `\r` (U+000D) are not part of the Duralade grammar.
-   - 💭 Why specify this? Cross-platform text files may use different line endings (`\n` on Unix, `\r\n` on Windows).
-     Duralade normalizes to `\n` only for deterministic parsing.
+1. Newlines are represented by either `\n` (U+000A) or `\r\n` (U+000D U+000A).
+   - Both Unix-style (`\n`) and Windows-style (`\r\n`) line endings are accepted.
+   - Standalone carriage return `\r` not followed by `\n` is a parse error.
+   - 💭 Why accept both? Cross-platform compatibility. Most modern languages accept both to work well on all systems.
 1. 🔒 Source code lines should not exceed 120 characters.
    - This is a recommendation, not a hard requirement.
    - Tools should warn about violations but still accept the code.
+   - Exception: lines where the content after indentation (and after `# ` for comments) contains no spaces are exempt,
+     since there is no natural break point. This covers URLs, long qualified names, and similar unbreakable tokens.
 1. 🔒 Only space characters (U+0020) are allowed for indentation and whitespace outside of string literals.
    - Tab characters (U+0009) are not allowed outside of string literals.
    - 💭 Why no tabs? Tabs render differently in different editors and contexts. Using only spaces ensures code looks
      identical everywhere, which is critical for deterministic formatting.
 1. 🔒 Indentation must be 4 spaces per indentation level.
    - Each nested level of code adds 4 spaces to the indentation.
+1. Only space (U+0020) and newlines (`\n` or `\r\n`) are valid whitespace characters.
+   - Other whitespace characters (tabs, etc.) are parse errors.
+   - 🔒 No trailing whitespace at end of lines or end of file.
+   - 🔒 No multiple consecutive blank lines.
+   - 🔒 Files must end with a newline character.
 
 ## 4. Comments
 
@@ -140,8 +147,7 @@ comment = "#" space { unicode_char } .
    - The `#` character, space, and everything after until the newline is part of the comment.
    - Comments do not nest.
 1. Comments must be the only content on their line.
-   - The comment must start at the expected indentation level for that line.
-   - Trailing comments (comments at the end of a line of code) are not allowed.
+   - 🔒 Comments must be on their own line (no trailing comments) and follow the current indentation level.
    - ❓ Should we add a separate construct for tool directives (e.g., linter overrides) since end-of-line comments are
      not allowed?
    - 💭 Why not allow trailing comments? With a 120 character line limit and the need for clear, readable code, trailing
@@ -155,7 +161,7 @@ comment = "#" space { unicode_char } .
 
 ```wirth
 identifier_normal = (unicode_lowercase_letter | "_") { unicode_lowercase_letter | unicode_digit | "_" } .
-identifier_raw = "`" /* content and escaping TBD */ "`" .
+identifier_raw = "`" { unicode_char | "``" } "`" .
 identifier = identifier_normal | identifier_raw .
 identifier_qualified = identifier { "." identifier } .
 ```
@@ -171,8 +177,8 @@ identifier_qualified = identifier { "." identifier } .
    - Raw identifiers can contain any Unicode characters, including backticks, newlines, and non-printable characters.
    - Raw identifiers are primarily for interoperability and code generation scenarios.
    - Example: `` `entity` ``, `` `User Name` ``, `` `value-with-dashes` ``
-   - Escaping mechanism: Raw identifiers use the same escaping rules as raw strings - two consecutive backticks ` ` ``
-     represent a single backtick (see Section 10.7).
+   - Escaping mechanism: Two consecutive backticks ` ` `` represent a single literal backtick within the identifier.
+   - Note: Single backticks delimit raw identifiers, while two or more backticks delimit raw strings (Section 10.7).
 1. There are no global reserved keywords in Duralade.
    - Keywords are context-specific and determined by the grammar.
    - What is a keyword in one context (e.g., `entity` where a construct is expected) may be a valid identifier in
@@ -186,7 +192,7 @@ identifier_qualified = identifier { "." identifier } .
 ### 6.1. Source Files
 
 ```wirth
-source_file = { annotation } { import_declaration } { file_construct } .
+source_file = { annotation } { import } { file_construct } .
 ```
 
 1. Source files have the `.dl` file extension.
@@ -217,10 +223,10 @@ source_file = { annotation } { import_declaration } { file_construct } .
 
 ```wirth
 import_alias = "as" identifier .
-import_declaration = "import" identifier_qualified [ import_alias ] .
+import = "import" identifier_qualified [ import_alias ] .
 ```
 
-1. Import declarations begin with the `import` keyword followed by a qualified module identifier.
+1. Imports begin with the `import` keyword followed by a qualified module identifier.
 1. Imports can be aliased with the `as` keyword.
    - Example: `import my.long.module as m`
    - The alias becomes the name used to access items from that module.
@@ -258,7 +264,8 @@ annotation = "@" invocation .
 ```wirth
 type_argument = identifier [ "=" type ] .
 type_arguments = "[" type_argument { "," type_argument } [ "," ] "]" .
-type = (identifier_qualified [ type_arguments ] | type_introspection | type_anonymous) [ "?" ] .
+type_named = identifier_qualified [ type_arguments ] .
+type = (type_named | type_entity_ref | type_introspection | type_anonymous) [ "?" ] .
 ```
 
 1. Types are referenced by identifier.
@@ -298,6 +305,10 @@ type = (identifier_qualified [ type_arguments ] | type_introspection | type_anon
 
 ### 7.3. Entity References
 
+```wirth
+type_entity_ref = "&" type .
+```
+
 1. Entity reference types are denoted with the `&` prefix.
    - Example: `&my_entity`, `&list[t = int]`
 1. Entity references refer to spawned or detached entities.
@@ -315,7 +326,7 @@ type = (identifier_qualified [ type_arguments ] | type_introspection | type_anon
 ### 7.4. Type Introspection
 
 ```wirth
-type_introspection = identifier_qualified [ type_arguments ] ("@type" | "@typein" | "@typeout") .
+type_introspection = type_named ("@type" | "@typein" | "@typeout") .
 ```
 
 1. Type introspection operators extract type information from identifiers.
@@ -336,7 +347,7 @@ type_introspection = identifier_qualified [ type_arguments ] ("@type" | "@typein
      is an entity value. Needed for stdlib `entity.run_result` and similar operations.
 1. Type introspection can be used at runtime for type comparisons.
    - Types are first-class values of the builtin `type` type.
-   - Example: `if value@type == str { ... }`
+   - Example: `if x := value as some_value@type {`
    - ❓ Runtime operations on type values (beyond equality comparison) TBD.
 1. ❓ Assignability between anonymous types from type introspection and user-defined data types TBD.
 
@@ -345,14 +356,14 @@ type_introspection = identifier_qualified [ type_arguments ] ("@type" | "@typein
 ```wirth
 type_anonymous_field_modifier = "in" | "out" | "out!" | "inout" .
 type_anonymous_field = [ type_anonymous_field_modifier ] [ identifier ] ":" type [ "=" "???" ] .
-type_anonymous_fields = type_anonymous_field { "," type_anonymous_field } [ "," ] .
-type_anonymous = ("data" | "func" | "entity") "{" [ type_anonymous_fields ] "}" .
+type_anonymous = ("data" | ([ "view" | "noblock" ] "func") | "entity") "{" { type_anonymous_field } "}" .
 ```
 
 1. Anonymous types are structural types defined inline without a name.
    - Anonymous data types: `data { field: int }`
-   - Anonymous function types: `func { in x: int, out result: str }`
-   - Anonymous entity types: `entity { in x: int, out result: str }`
+   - Anonymous function types: `func { in x: int }`, `view func { in x: int }`
+   - Anonymous entity types: `entity { in x: int }`
+   - Fields are newline-separated (same rules as construct bodies).
 1. Anonymous types are structurally typed (duck-typed).
    - Any type with matching fields satisfies the anonymous type.
    - Field order does not matter for structural compatibility.
@@ -399,7 +410,7 @@ file_construct = { annotation } (type | data | entity | func | extern | native) 
    - `native` constructs, alphabetically by name.
    - 💭 Why strict ordering? Ensures deterministic, predictable file organization and makes constructs easy to locate.
 
-### 8.2. Field Declarations
+### 8.2. Fields
 
 ```wirth
 field_intype = "intype" identifier [ ":" type ] [ "=" type ] .
@@ -410,7 +421,7 @@ field_signature = (identifier ":" type [ "=" expression ]) |
 
 field_var = ("in" | "out" | "out!" | "inout" | "value" | "implicit") field_signature .
 
-field_declaration = { annotation } (field_intype | field_var) .
+field = { annotation } (field_intype | field_var) .
 ```
 
 1. Fields in all constructs except `data` must begin with a modifier: `intype`, `in`, `out`, `out!`, `inout`, `value`,
@@ -527,9 +538,9 @@ data = [ data_modifier ] "data" identifier "{" data_body "}" .
 
 ```wirth
 entity_modifier = "out" .
-entity_init_func = "init" "{" { field_declaration } { statement } "}" .
-entity_run_func = "run" "{" { field_declaration } { statement } "}" .
-entity_body = { field_declaration } [ entity_init_func ] [ entity_run_func ] { func } .
+entity_init_func = "init" "{" { field } { statement } "}" .
+entity_run_func = "run" "{" { field } { statement } "}" .
+entity_body = { field } [ entity_init_func ] [ entity_run_func ] { func } .
 entity = [ entity_modifier ] "entity" identifier "{" entity_body "}" .
 ```
 
@@ -574,7 +585,7 @@ entity = [ entity_modifier ] "entity" identifier "{" entity_body "}" .
 
 ```wirth
 func = [ "out" ] [ "view" | "noblock" ] "func" identifier "{" func_body "}" .
-func_body = { field_declaration } { statement } .
+func_body = { field } { statement } .
 ```
 
 1. Functions are declared with the `func` keyword followed by a name and body.
@@ -596,8 +607,8 @@ func_body = { field_declaration } { statement } .
 ### 8.7. Externs and Natives
 
 ```wirth
-extern = "extern" identifier "{" { field_declaration } "}" .
-native = "native" ( "view" | "noblock" ) identifier "{" { field_declaration } "}" .
+extern = "extern" identifier "{" { field } "}" .
+native = "native" ( "view" | "noblock" ) identifier "{" { field } "}" .
 ```
 
 1. Externs and native functions are external function declarations implemented outside Duralade.
@@ -627,9 +638,13 @@ statement = block |
             assignment |
             if |
             for |
+            for_break |
+            for_continue |
             defer |
             return |
+            return_early |
             implicitly |
+            patch |
             expression .
 ```
 
@@ -665,7 +680,7 @@ block = "{" { statement } "}" .
 ### 9.3. Variable Declarations and Assignments
 
 ```wirth
-var = "var" field_signature { "," field_signature } .
+var = "var" field_signature { "," field_signature } [ "=" expression { "," expression } ] .
 var_assignment = identifier { "," identifier } ":=" expression { "," expression } .
 assignment_op = "=" | "+=" | "-=" | "*=" | "/=" | "%=" .
 assignment = expression { "," expression } assignment_op expression { "," expression } .
@@ -747,7 +762,7 @@ if = "if" (if_condition_bool | if_narrowing_as | if_narrowing_nil)
 ### 9.5. For
 
 ```wirth
-for_clause = expression | identifier "in" expression .
+for_clause = expression | identifier "in" invocation .
 for = "for" [ ":" identifier ] [ for_clause ] block .
 for_break = "break" [ ":" identifier ] .
 for_continue = "continue" [ ":" identifier ] .
@@ -820,6 +835,44 @@ implicitly = implicitly_block | implicitly_statement .
    - Setting the same type twice in one `implicitly` statement is a compile error.
 1. Each expression's type determines which implicit context value is set.
    - If an implicit of the same type already exists in the context, it is shadowed by the new value.
+
+### 9.9. Patch
+
+```wirth
+patch_version = identifier_qualified | "@default" .
+patch_first_branch = "%" patch_version "{{" { statement } .
+patch_next_branch = "%" "}}" patch_version "{{" { statement } .
+patch_chain = patch_first_branch { patch_next_branch } "%" "}}" .
+patch_complete = "%" identifier_qualified "complete" .
+patch = patch_chain | patch_complete .
+```
+
+1. Patch statements allow different code versions during entity execution.
+   - Control which statements execute without introducing variable scoping.
+1. 🔒 Patch directives must start at column 0.
+   - 🔒 Spaces required: `% version {{` not `%version{{`.
+   - 💭 Why column 0? The `{{` delimiter would be confusing if indented since `{` creates variable scopes.
+1. Version identifiers are qualified identifiers or `@default`.
+   - Example: `% my_feature.v2 {{`, `% auth.change.v3 {{`, `% @default {{`
+   - 🔒 Use qualified names to avoid accidental coupling.
+1. Patch blocks chain like if/else, ending with `% }}`.
+   - Example:
+     ```
+     % my_feature.v3 {{
+         newest_code()
+     % }} my_feature.v2 {{
+         older_code()
+     % }} @default {{
+         original_code()
+     % }}
+     ```
+1. Version selection is global per entity, occurring on first encounter.
+   - If any branch version is already selected, that branch executes.
+   - Otherwise, first branch executes and its version is recorded.
+   - Recorded in `DuraladePatchSelect` event (see engine specification).
+1. The `% version complete` form marks a resolved patch.
+   - Ensures version is in entity's selected set.
+   - Error if replaying and version not selected, or if previously selected branch is removed.
 
 ## 10. Expressions
 
@@ -1014,7 +1067,8 @@ literal_string_escape = "\" ( "n" | "r" | "t" | "\" | `"` |
 ) .
 literal_string_quoted = `"` { unicode_char | literal_string_escape } `"` .
 
-literal_string_raw = "`" { unicode_char | "``" } "`" .
+literal_string_raw_delimiter = "``" { "`" } .
+literal_string_raw = literal_string_raw_delimiter { unicode_char } literal_string_raw_delimiter .
 
 literal_string = literal_string_quoted | literal_string_raw .
 
@@ -1045,20 +1099,18 @@ literal = literal_number | literal_string | literal_bool | literal_nil | literal
    - 💭 Why lowercase hex only? Deterministic formatting requires choosing one canonical form. Lowercase is standard in
      most modern languages.
    - ❓ String interpolation syntax TBD.
-1. Raw string literals are enclosed in backticks and use double-backtick escaping.
-   - Only one escape sequence exists: two consecutive backticks ` ` `` represent a single backtick in the string
-     content.
-   - All other characters, including backslashes and newlines, are literal.
-   - Example: `` `hello``world` `` produces `hello`world`.
-   - Example: `` `C:\path\file` `` produces `C:\path\file` (backslashes are literal).
-   - Example: `` `SELECT * FROM ``users`` ` produces `SELECT * FROM `users``.
-   - 💭 Why double-backtick instead of backslash escaping? This keeps raw strings truly "raw" - backslashes, which are
-     common in regex, file paths, and SQL, require no escaping. The double-delimiter approach is used successfully in
-     languages like C#.
+1. Raw string literals are enclosed in two or more backticks and have no escape sequences.
+   - The opening delimiter is N backticks (N >= 2). The closing delimiter is exactly N backticks.
+   - All characters between the delimiters are literal, including backslashes, newlines, and single backticks.
+   - To include a sequence of backticks in the content, use a delimiter longer than any backtick sequence in the content.
+   - Example: ` ``hello`` ` produces `hello`.
+   - Example: ` ``C:\path\file`` ` produces `C:\path\file` (backslashes are literal).
+   - Example: ``` `` `SELECT * FROM `users` `` ``` produces `` `SELECT * FROM `users` `` (single backticks are literal).
+   - Example: ` ``` has ``two`` backticks ``` ` — use 3-backtick delimiter when content contains ```` `` ````.
+   - 💭 Why N-backtick delimiters? This makes raw strings truly "raw" — zero escape sequences are needed, ever. Just
+     widen the delimiter to accommodate any content. Single backticks are reserved for raw identifiers (Section 5).
    - ❓ Should multiline strings support automatic indentation handling (e.g., YAML-like indent removal or Scala-like
      `stripIndent`)?
-1. Raw string and raw identifier escaping rules are identical.
-   - This resolves the escaping mechanism for raw identifiers defined in Section 5.
 1. Boolean literals are `true` and `false`.
 1. The nil literal is `nil` and is only valid for nilable types.
 1. Array literals create instances of the stdlib `array[t]` type.
@@ -1091,63 +1143,27 @@ wait = "wait" "(" expression ")" .
 ### 10.9. Anonymous Functions and Data
 
 ```wirth
-anonymous_data_field = identifier [ ":" type ] "=" expression .
-anonymous_data_body = [ anonymous_data_field { "," anonymous_data_field } [ "," ] ] .
-anonymous_data = "data" "{" anonymous_data_body "}" .
-
-anonymous_func = "func" "{" func_body "}" .
+anonymous_data = "data" "{" { field_signature } "}" .
+anonymous_func = [ "view" | "noblock" ] "func" "{" func_body "}" .
 ```
 
 1. Anonymous data expressions create instances of anonymous data types.
+   - Uses the same field syntax as named data constructs (`field_signature`, newline-separated; see Section 8.4).
+   - Every field must have a `= expression` default (since an instance is being created, every field needs a value).
    - Field types are inferred from the expression if not explicitly provided.
-   - Example: `data { x = 1, y = 2 }` infers `x: int` and `y: int`.
-   - Example: `data { x: int = 1, y: str = "hello" }` with explicit types.
+   - Example:
+     ```
+     data {
+       x = 1
+       y: str = "hello"
+     }
+     ```
 1. Anonymous data field shorthand applies when the field name matches an identifier in scope.
-   - Example: `data { x, y }` is shorthand for `data { x = x, y = y }`.
+   - Example: `data { x }` is shorthand for `data { x = x }` when `x` is in scope.
    - 🔒 When an identifier matches the field name, the shorthand form must be used.
 1. Anonymous function expressions create function instances.
    - Use the same body structure as named functions (see Section 8.6).
+   - Can specify `view` or `noblock` modifiers just like named functions.
    - Type inference applies to field types as with variable declarations.
    - ❓ Shorthand syntax for anonymous functions (lambda-style) is TBD.
 1. Anonymous expressions evaluate to instances of their corresponding anonymous types (see Section 7.5).
-
-## 11. Patching
-
-```wirth
-patch_version = identifier | "@default" .
-patch_begin = "%" patch_version "{{" .
-patch_end = "%" "}}" [ patch_begin ] .
-```
-
-1. Patch blocks allow different code versions to coexist during entity execution.
-   - Preprocessor-style directives processed before parsing.
-   - Support code changes while entities are mid-execution.
-1. Patch directives must start at column 0 with no indentation.
-   - 🔒 Spaces required: `% version {{` not `%version{{`.
-1. Version identifiers follow identifier rules (see Section 5).
-   - `@default` is a reserved version identifier for the fallback code path.
-   - Example: `% v2 {{`, `% feature_update {{`, `% @default {{`
-1. Patch blocks chain like if/else.
-   - `% }} version {{` closes previous and opens new block on same line.
-   - Final block ends with `% }}`.
-   - Example:
-     ```
-     % v3 {{
-         newest_code()
-     % }} v2 {{
-         older_code()
-     % }} @default {{
-         original_code()
-     % }}
-     ```
-1. Each branch must be independently parseable with surrounding context.
-   - Code within patches follows normal indentation rules.
-   - Branches can have different indentation (one inside if, one not).
-1. Patch blocks can nest.
-1. Patch version is selected the first time the patch location is reached during execution.
-   - The decision is permanent for that entity.
-   - 💭 Why? Entities must maintain consistent code version throughout their lifetime for deterministic execution.
-1. ❓ Iteration problem TBD: When new version deploys mid-loop, should patch adopt new version or continue with
-   original?
-1. ❓ Patch identifier scoping TBD: Should patches be module-specific, or global across the entire codebase? Should
-   conventions or syntax encourage module-prefixed identifiers (e.g., `my_module_v2`)?

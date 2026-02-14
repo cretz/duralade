@@ -1,0 +1,19 @@
+# Test file for identifier validation errors
+
+import "quoted.path"
+       ^ @@ERROR: Expected identifier
+
+import Capitalized.name
+       ^ @@ERROR: Unexpected character 'C' in identifier
+
+import foo.Bar.baz
+           ^ @@ERROR: Unexpected character 'B' in identifier
+
+import test.123invalid
+            ^ @@ERROR: cannot start with a digit
+
+import foo-bar
+          ^ @@ERROR: Unexpected character '-' in identifier
+
+import `unterminated
+       ^^^^^^^^^^^^^ @@ERROR: Unterminated raw identifier

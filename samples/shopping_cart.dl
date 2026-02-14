@@ -1,4 +1,5 @@
-@doc(summary = `Shopping cart entity demonstrating stateful workflows with prepare/apply pattern.
+@doc(
+    summary = ``Shopping cart entity demonstrating stateful workflows with prepare/apply pattern.
 
 Example usage via CLI:
 
@@ -61,22 +62,23 @@ Example usage via CLI:
 
     # Check final status and order_id
     duralade entity describe \
-        --state cart1.duralade.json`)
+        --state cart1.duralade.json``,
+)
 
 out data error_stale_prepared_values {
     message: str
 }
 
 out data shopping_cart_item {
-    product_id: str
     name: str
     price: int
+    product_id: str
     quantity: int
 }
 
 out entity shopping_cart {
     out order_id: str?
-    value items: map[key = str, value = shopping_cart_item] = {}
+    value items: map[key = str, value = shopping_cart_item] = { }
     value prepared_subtotal: int?
     value prepared_tax: int?
 

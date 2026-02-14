@@ -1,0 +1,19 @@
+# Test file for strict construct ordering
+
+# Kind violation: data after func
+data alpha {}
+func beta {}
+^ @@STRICT: Required blank line between constructs
+
+data gamma {}
+^^^^^^^^^^^^^  @@STRICT: 'data gamma' should appear before 'func beta'
+
+# Alphabetical violation within kind
+func delta {}
+
+func aaa {}
+^^^^^^^^^^^ @@STRICT: 'func aaa' should appear before 'func beta'
+
+# Out-first violation within kind
+out func eee {}
+^^^^^^^^^^^^^^^ @@STRICT: 'out func eee' should appear before 'func aaa'
